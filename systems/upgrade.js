@@ -57,6 +57,7 @@ export function applyUpgrade(save, id) {
   save.currencies.quartz -= cost.quartz;
   save.currencies.bling -= cost.bling;
   save.currencies.plate -= cost.plate;
+  save.stats.spent += cost.quartz + cost.bling + cost.plate;
   save.inventory.shards[id] = (save.inventory.shards[id] || 0) - cost.shards;
   unit.shards = save.inventory.shards[id];
   unit.level += 1;

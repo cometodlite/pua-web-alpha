@@ -33,7 +33,9 @@ export const CHARACTERS = [
       type: "heal-buff",
       cost: 100,
       power: 112,
-      description: "파티를 회복하고 3턴 동안 별 속성 피해를 올립니다.",
+      cutin: "별빛 파동이 파티의 코어를 다시 맞춥니다.",
+      effectClass: "ex-heal",
+      description: "별빛 파동으로 파티를 회복하고 3턴 동안 별 속성 피해를 올립니다.",
     },
   },
   {
@@ -50,7 +52,9 @@ export const CHARACTERS = [
       type: "nuke",
       cost: 100,
       power: 176,
-      description: "단일 대상에게 높은 양자 피해를 줍니다.",
+      cutin: "얇은 양자 섬광이 적의 중심선을 가릅니다.",
+      effectClass: "ex-slash",
+      description: "날카로운 양자 섬광으로 단일 대상에게 높은 피해를 줍니다.",
     },
   },
   {
@@ -67,7 +71,9 @@ export const CHARACTERS = [
       type: "vulnerability",
       cost: 100,
       power: 132,
-      description: "피해를 주고 3턴 동안 적이 받는 피해를 늘립니다.",
+      cutin: "공허 압력이 낮아지며 방어막의 틈이 드러납니다.",
+      effectClass: "ex-void",
+      description: "공허 파동으로 피해를 주고 3턴 동안 적이 받는 피해를 늘립니다.",
     },
   },
   {
@@ -84,7 +90,9 @@ export const CHARACTERS = [
       type: "shield",
       cost: 100,
       power: 146,
-      description: "파티에 방어막을 부여하고 다음 피해를 줄입니다.",
+      cutin: "허수 장벽이 전열 앞에서 다섯 겹으로 펼쳐집니다.",
+      effectClass: "ex-shield",
+      description: "허수 장벽으로 파티를 보호하고 다음 피해를 줄입니다.",
     },
   },
 ];

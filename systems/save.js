@@ -3,7 +3,7 @@ import { clone, todayKey } from "./ui.js";
 
 export const SAVE_KEY = "pua_save";
 export const LEGACY_SAVE_KEY = "pua-web-alpha-01";
-export const SAVE_VERSION = "0.2.0";
+export const SAVE_VERSION = "0.3.0";
 
 export const defaultSave = {
   version: SAVE_VERSION,
@@ -41,14 +41,36 @@ export const defaultSave = {
     sfx: true,
     vibration: false,
     battleSpeed: 1,
+    compactLog: false,
   },
   stats: {
+    accountExp: 0,
     wins: 0,
     losses: 0,
     stagePlays: 0,
     pulls: 0,
     earned: 0,
     upgrades: 0,
+    exUses: 0,
+    critHits: 0,
+    advantageHits: 0,
+    bossKills: 0,
+    sameDayBossKills: 0,
+    purchases: 0,
+    expensivePurchases: 0,
+    spent: 0,
+  },
+  achievements: {
+    filter: "all",
+    claimed: {},
+    hidden: {},
+    manual: {},
+  },
+  story: {
+    seenStageStart: [],
+  },
+  ui: {
+    inventoryFilter: "all",
   },
   recent: [],
   battle: null,
@@ -106,6 +128,16 @@ export function normalizeSave(incoming) {
     missions: { ...base.missions, ...(source.missions || {}) },
     settings: { ...base.settings, ...(source.settings || {}) },
     stats: { ...base.stats, ...(source.stats || {}) },
+    achievements: {
+      filter: source.achievements?.filter || base.achievements.filter,
+      claimed: { ...base.achievements.claimed, ...(source.achievements?.claimed || {}) },
+      hidden: { ...base.achievements.hidden, ...(source.achievements?.hidden || {}) },
+      manual: { ...base.achievements.manual, ...(source.achievements?.manual || {}) },
+    },
+    story: {
+      seenStageStart: Array.isArray(source.story?.seenStageStart) ? source.story.seenStageStart : [],
+    },
+    ui: { ...base.ui, ...(source.ui || {}) },
   };
 
   if (source.inventory && !source.inventory.materials) {
@@ -141,6 +173,10 @@ export function normalizeSave(incoming) {
   if (!save.gacha.history) save.gacha.history = [];
   save.gacha.history = save.gacha.history.slice(0, 20);
   save.recent = Array.isArray(save.recent) ? save.recent.slice(0, 20) : [];
+  if (![1, 1.5, 2].includes(Number(save.settings.battleSpeed))) save.settings.battleSpeed = 2;
+  if (!save.stats.accountExp && save.clearedStages.length) {
+    save.stats.accountExp = save.clearedStages.length * 120;
+  }
   save.battle = null;
 
   return save;

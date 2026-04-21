@@ -1,12 +1,17 @@
-import { ATTRIBUTES, CHARACTERS, CURRENCIES, attributeLabel, getCharacter } from "./data/characters.js";
+import { ACHIEVEMENT_CATEGORIES } from "./data/achievements.js";
+import { getBossByStage } from "./data/bosses.js";
+import { ATTRIBUTES, ATTRIBUTE_ADVANTAGE, CHARACTERS, CURRENCIES, attributeLabel, getCharacter } from "./data/characters.js";
 import { getEnemy } from "./data/enemies.js";
 import { GACHA } from "./data/gacha.js";
+import { UPDATE_LOG, getRegionStory, getStageStory } from "./data/story.js";
 import { REGIONS, STAGES, getNextStage, getRegion, getStage } from "./data/stages.js";
+import { achievementSummary, claimAchievement, ensureAchievements, getAchievementRows, getPlayerLevel, recommendedAttributeFor, triggerHiddenAchievement } from "./systems/achievement.js";
+import { playSound } from "./systems/audio.js";
 import { battleSummary, createBattle, tickBattle as advanceBattle, useSkill as fireSkill } from "./systems/battle.js";
 import { DAILY_MISSIONS, claimMission, ensureDailyMissions, updateMission } from "./systems/mission.js";
 import { SAVE_VERSION, addRecent, addUnique, createDefaultSave, loadSave, resetSave, saveGame } from "./systems/save.js";
 import { allUnitCards, applyUpgrade, canUpgrade, getOwnedCharacters, partyPower, upgradeCost } from "./systems/upgrade.js";
-import { clone, formatNumber, mix, percent, rewardName, rewardText, todayKey, weightedPick } from "./systems/ui.js";
+import { clone, formatNumber, mix, rewardName, rewardText, todayKey, weightedPick } from "./systems/ui.js";
 
 let save = loadSave();
 let toastTimer = 0;
@@ -26,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
   els.modalClose = document.getElementById("modalClose");
 
   ensureDailyMissions(save);
+  ensureAchievements(save);
   wireEvents();
   syncStartScreen();
   render();
@@ -45,6 +51,8 @@ function wireEvents() {
     save = createDefaultSave();
     save.started = true;
     ensureDailyMissions(save);
+    ensureAchievements(save);
+    playSound(save, "tap");
     persist("게스트 데이터가 생성되었습니다.");
     syncStartScreen();
     render();
@@ -52,6 +60,8 @@ function wireEvents() {
 
   els.continueButton.addEventListener("click", () => {
     save.started = true;
+    ensureAchievements(save);
+    playSound(save, "tap");
     persist();
     syncStartScreen();
     render();
@@ -69,6 +79,7 @@ function wireEvents() {
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const { action, id, count } = target.dataset;
+    playSound(save, "tap");
 
     if (action === "select-region") selectRegion(id);
     if (action === "start-stage") startBattle(id);
@@ -78,6 +89,10 @@ function wireEvents() {
     if (action === "upgrade") upgradeUnit(id);
     if (action === "pull") pullGacha(Number(count));
     if (action === "claim-mission") claimDailyMission(id);
+    if (action === "set-inventory-filter") setInventoryFilter(id);
+    if (action === "set-achievement-filter") setAchievementFilter(id);
+    if (action === "claim-achievement") claimAchievementReward(id);
+    if (action === "hidden-trigger") revealHidden(id);
     if (action === "toggle-setting") toggleSetting(id);
     if (action === "save") persist("저장되었습니다.");
     if (action === "load") {
@@ -88,6 +103,7 @@ function wireEvents() {
       toast("불러왔습니다.");
     }
     if (action === "reset") confirmReset();
+    if (action === "modal-close") closeModal();
     if (action === "confirm-reset") resetGame();
     if (action === "go") {
       save.activeTab = id;
@@ -120,6 +136,7 @@ function render() {
   }
 
   ensureDailyMissions(save);
+  ensureAchievements(save);
   const views = {
     home: renderHome,
     stage: renderStage,
@@ -152,6 +169,8 @@ function renderHome() {
   const power = Math.round(partyPower(save));
   const nextStage = getNextStage(save);
   const region = getRegion(nextStage.region);
+  const story = getRegionStory(region.id);
+  const achievements = achievementSummary(save);
   const owned = Object.keys(save.units).length;
 
   return `
@@ -159,12 +178,12 @@ function renderHome() {
       <div class="hero-copy">
         <p class="eyebrow">PUA WEB ALPHA ${SAVE_VERSION}</p>
         <h2>${region.name} 신호가 열렸습니다.</h2>
-        <p>${region.line}</p>
+        <p>${story?.intro || region.line}</p>
         <div class="quick-grid">
+          ${metricTile("Lv", getPlayerLevel(save))}
           ${metricTile("전투력", formatNumber(power))}
           ${metricTile("진행", `${save.clearedStages.length}/${STAGES.length}`)}
-          ${metricTile("보유 유닛", `${owned}/${CHARACTERS.length}`)}
-          ${metricTile("천장", `${save.gacha.pity}/${GACHA.pityTarget}`)}
+          ${metricTile("업적", `${achievements.claimed}/${achievements.total}`)}
         </div>
         <div class="actions" style="margin-top: 14px">
           <button class="primary-button" data-action="start-stage" data-id="${nextStage.id}" type="button">다음 탐색</button>
@@ -174,6 +193,17 @@ function renderHome() {
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="home" aria-label="펜타 코어"></canvas>
       </div>
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">GUIDE</p>
+          <h3>오늘 해야 할 것</h3>
+        </div>
+        <span class="pill">보유 ${owned}/${CHARACTERS.length}</span>
+      </div>
+      ${renderProgressGuide(nextStage, story)}
     </section>
 
     <section class="full-band">
@@ -200,6 +230,7 @@ function renderHome() {
 
 function renderStage() {
   const region = getRegion(save.selectedRegion);
+  const story = getRegionStory(region.id);
   const stages = STAGES.filter((stage) => stage.region === region.id);
 
   return `
@@ -210,10 +241,11 @@ function renderStage() {
           <h3>지역 선택</h3>
         </div>
       </div>
+      <p class="stage-note">${story?.title || region.line} · ${story?.guide || region.focus}</p>
       <div class="region-grid">${REGIONS.map(regionButton).join("")}</div>
     </section>
 
-    <section class="battle-band ${save.battle?.flash ? "is-flash" : ""}">
+    <section class="battle-band ${save.battle?.flash ? "is-flash" : ""} ${save.battle?.bossAura || ""}">
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="stage" aria-label="${region.name} 지역"></canvas>
         ${renderFloaters()}
@@ -239,11 +271,12 @@ function renderRegionPanel(region) {
   const nextStage = getNextStage(save);
   const selectedNext = nextStage.region === region.id ? nextStage : STAGES.find((stage) => stage.region === region.id && isStageOpen(stage.id));
   const locked = !save.unlockedRegions.includes(region.id);
+  const story = getRegionStory(region.id);
   return `
     <div>
       <p class="eyebrow">SELECTED</p>
       <h3>${region.name}</h3>
-      <p>${locked ? "이전 지역의 핵심 스테이지를 클리어하면 열립니다." : region.line}</p>
+      <p>${locked ? "이전 지역의 핵심 스테이지를 클리어하면 열립니다." : story?.intro || region.line}</p>
     </div>
     <div class="metric-row compact">
       <span class="pill">주요 보상 ${region.focus}</span>
@@ -259,17 +292,21 @@ function renderBattlePanel() {
   const battle = save.battle;
   const stage = getStage(battle.stageId);
   const enemy = getEnemy(stage.enemy);
+  const boss = getBossByStage(stage.id);
   const enemyElement = ATTRIBUTES[enemy.element];
   const summary = battleSummary(save);
   const units = getOwnedCharacters(save);
+  const logLines = save.settings.compactLog ? 3 : 6;
 
   return `
+    ${battle.cutin ? `<div class="ex-cutin ${battle.cutin.className}"><strong>${battle.cutin.name}</strong><span>${battle.cutin.text}</span></div>` : ""}
     <div>
-      <p class="eyebrow">BATTLE</p>
+      <p class="eyebrow">${boss ? boss.title : "BATTLE"}</p>
       <div class="battle-topline">
-        <h3>${stage.name}</h3>
+        <h3>${boss ? boss.name : stage.name}</h3>
         <span class="pill">${enemyElement.sigil} ${enemyElement.name}</span>
       </div>
+      <p>${boss ? boss.description : enemy.trait?.description || enemy.archetype}</p>
     </div>
     <div>
       <div class="battle-topline">
@@ -286,12 +323,12 @@ function renderBattlePanel() {
       <div class="bar"><div class="bar-fill" style="width: ${summary.partyPercent}%"></div></div>
     </div>
     <div class="speed-row">
-      ${[1, 2, 3].map((speed) => `<button class="speed-button ${save.settings.battleSpeed === speed ? "is-active" : ""}" data-action="speed" data-id="${speed}" type="button">x${speed}</button>`).join("")}
+      ${[1, 1.5, 2].map((speed) => `<button class="speed-button ${save.settings.battleSpeed === speed ? "is-active" : ""}" data-action="speed" data-id="${speed}" type="button">x${speed}</button>`).join("")}
     </div>
     <div class="skill-row">
       ${units.map((unit) => skillButton(unit, battle, enemy)).join("")}
     </div>
-    <div class="battle-log">${battle.log.slice(-5).join("<br>")}</div>
+    <div class="battle-log">${battle.log.slice(-logLines).join("<br>")}</div>
     <div class="actions">
       <button class="ghost-button" data-action="retreat" type="button">철수</button>
     </div>
@@ -325,19 +362,20 @@ function renderUnit() {
 }
 
 function renderGacha() {
+  const remainingPity = Math.max(0, GACHA.pityTarget - save.gacha.pity);
   return `
     <section class="gacha-band">
       <div class="gacha-copy">
         <p class="eyebrow">GACHA</p>
         <h2>${GACHA.name}</h2>
-        <p>이미 보유한 유닛은 조각과 재화로 변환됩니다. ${GACHA.pityTarget}회 안에 ANTIQUE POWER 신호가 보정됩니다.</p>
+        <p>현재 픽업 없음. 이미 보유한 유닛은 조각과 재화로 변환됩니다.</p>
         <div class="gacha-actions">
           <button class="primary-button" data-action="pull" data-count="1" type="button" ${save.currencies.quartz < GACHA.singleCost ? "disabled" : ""}>1회 Q${GACHA.singleCost}</button>
           <button class="ghost-button" data-action="pull" data-count="10" type="button" ${save.currencies.quartz < GACHA.tenCost ? "disabled" : ""}>10회 Q${GACHA.tenCost}</button>
         </div>
         <div class="gacha-rate">
           <span>ANTIQUE POWER 8% · MYSTIC 18% · RARE 74%</span>
-          <span>천장 진행 ${save.gacha.pity}/${GACHA.pityTarget}</span>
+          <span>${remainingPity <= 5 ? "천장 임박" : "천장까지"} ${remainingPity}회 · 중복은 자동 변환</span>
         </div>
       </div>
       <div class="scene-wrap">
@@ -376,13 +414,20 @@ function renderMenu() {
           <h3>인벤토리</h3>
         </div>
       </div>
-      ${inventorySection("재화", CURRENCIES.map((item) => ({ label: item.name, value: save.currencies[item.id] })))}
-      ${inventorySection("강화 재료", [
-        { label: "코어 조각", value: save.inventory.materials.core },
-        { label: "양자 분진", value: save.inventory.materials.dust },
-        { label: "공허 키", value: save.inventory.materials.key },
-      ])}
-      ${inventorySection("캐릭터 조각", CHARACTERS.map((unit) => ({ label: unit.name, value: save.inventory.shards[unit.id] || 0 })))}
+      ${renderInventoryFilters()}
+      ${renderFilteredInventory()}
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">ACHIEVEMENT</p>
+          <h3>업적</h3>
+        </div>
+        <span class="pill">${achievementSummary(save).ready} 수령 가능</span>
+      </div>
+      ${renderAchievementFilters()}
+      <div class="achievement-list">${getAchievementRows(save, save.achievements.filter).map(achievementCard).join("")}</div>
     </section>
 
     <section class="full-band">
@@ -395,6 +440,19 @@ function renderMenu() {
       ${settingRow("bgm", "BGM", save.settings.bgm)}
       ${settingRow("sfx", "효과음", save.settings.sfx)}
       ${settingRow("vibration", "진동", save.settings.vibration)}
+      ${settingRow("compactLog", "로그 간소화", save.settings.compactLog)}
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">UPDATE</p>
+          <h3>업데이트 내역</h3>
+        </div>
+      </div>
+      <div class="recent-list">
+        ${UPDATE_LOG.map((line, index) => `<button class="recent-row log-row" ${index === UPDATE_LOG.length - 1 ? 'data-action="hidden-trigger" data-id="missing_record"' : ""} type="button">${line}</button>`).join("")}
+      </div>
     </section>
 
     <section class="full-band">
@@ -434,6 +492,24 @@ function metricTile(label, value) {
   return `<div class="metric-tile"><strong>${value}</strong><span>${label}</span></div>`;
 }
 
+function renderProgressGuide(nextStage, story) {
+  const nextRegion = getRegion(nextStage.region);
+  const boss = getBossByStage(nextStage.id);
+  const power = Math.round(partyPower(save));
+  const target = power >= nextStage.recommendedPower ? "탐색 가능" : `강화 필요 ${formatNumber(nextStage.recommendedPower - power)}`;
+  const nextUnlock = nextStage.unlocks?.regions?.[0] ? `${getRegion(nextStage.unlocks.regions[0]).name} 해금` : boss ? "보스 제압" : "다음 스테이지 해금";
+  return `
+    <div class="guide-card">
+      <strong>${boss ? boss.name : `${nextRegion.name} · ${nextStage.name}`}</strong>
+      <span>${story?.guide || nextRegion.line}</span>
+      <div class="metric-row compact">
+        <span class="pill">${target}</span>
+        <span class="pill">${nextUnlock}</span>
+      </div>
+    </div>
+  `;
+}
+
 function missionRow(mission) {
   const entry = save.missions.daily[mission.id];
   const progress = Math.min(mission.target, entry.progress);
@@ -469,7 +545,9 @@ function regionButton(region) {
 
 function stageTile(stage) {
   const enemy = getEnemy(stage.enemy);
+  const boss = getBossByStage(stage.id);
   const enemyElement = ATTRIBUTES[enemy.element];
+  const recommended = ATTRIBUTES[recommendedAttributeFor(enemy.element)];
   const locked = !isStageOpen(stage.id) || !save.unlockedRegions.includes(stage.region);
   const cleared = save.clearedStages.includes(stage.id);
   const power = Math.round(partyPower(save));
@@ -477,16 +555,18 @@ function stageTile(stage) {
   const state = cleared ? "CLEAR" : locked ? "LOCK" : power >= stage.recommendedPower ? "OPEN" : "HARD";
 
   return `
-    <article class="stage-tile ${locked ? "is-locked" : ""}">
+    <article class="stage-tile ${locked ? "is-locked" : ""} ${boss ? "is-boss" : ""}">
       <div class="stage-title">
         <div>
-          <strong>${stage.order}. ${stage.name}</strong>
-          <span class="stage-meta">${enemy.name} · ${enemyElement.sigil} ${enemyElement.name}</span>
+          <strong>${stage.order}. ${boss ? boss.name : stage.name}</strong>
+          <span class="stage-meta">${boss ? "BOSS · " : ""}${enemy.name} · ${enemyElement.sigil} ${enemyElement.name}</span>
         </div>
         <span class="pill">${state}</span>
       </div>
-      <div class="stage-meta">권장 전투력 ${formatNumber(stage.recommendedPower)} · 현재 ${formatNumber(power)}</div>
-      <div class="stage-meta">드롭 ${rewardText(reward)}</div>
+      <div class="stage-meta">권장 전투력 ${formatNumber(stage.recommendedPower)} · 추천 속성 ${recommended.sigil} ${recommended.name}</div>
+      <div class="stage-meta">${enemy.trait?.label || enemy.archetype}: ${enemy.trait?.description || ""}</div>
+      <div class="stage-meta">최초 ${rewardText(stage.firstReward)}</div>
+      <div class="stage-meta">반복 ${rewardText(stage.repeatReward)}</div>
       <button class="${locked ? "ghost-button" : "primary-button"}" data-action="start-stage" data-id="${stage.id}" type="button" ${locked ? "disabled" : ""}>진입</button>
     </article>
   `;
@@ -564,21 +644,86 @@ function poolTile(character) {
 
 function resultTile(result) {
   return `
-    <div class="gacha-result">
-      <span class="result-chip">${result.grade}</span>
+    <div class="gacha-result ${result.gradeClass || ""}">
+      <span class="result-chip">${result.grade}${result.duplicate ? " · 중복" : ""}</span>
       <strong>${result.name}</strong>
       <span>${result.detail}</span>
     </div>
   `;
 }
 
+function renderInventoryFilters() {
+  const filters = [
+    ["all", "전체"],
+    ["currency", "재화"],
+    ["material", "재료"],
+    ["plate", "형판"],
+    ["shard", "조각"],
+    ["etc", "기타"],
+  ];
+  return `<div class="filter-row">${filters.map(([id, label]) => `<button class="filter-button ${save.ui.inventoryFilter === id ? "is-active" : ""}" data-action="set-inventory-filter" data-id="${id}" type="button">${label}</button>`).join("")}</div>`;
+}
+
+function renderFilteredInventory() {
+  const filter = save.ui.inventoryFilter;
+  const sections = [];
+  if (filter === "all" || filter === "currency") {
+    sections.push(inventorySection("재화", CURRENCIES.map((item) => ({ label: item.name, value: save.currencies[item.id], note: "기본 재화" }))));
+  }
+  if (filter === "all" || filter === "material") {
+    sections.push(inventorySection("강화 재료", [
+      { label: "코어 조각", value: save.inventory.materials.core, note: "피온스 주요 드롭" },
+      { label: "양자 분진", value: save.inventory.materials.dust, note: "트로맨션/오로시스 드롭" },
+      { label: "공허 키", value: save.inventory.materials.key, note: "오로시스 후반 드롭" },
+    ]));
+  }
+  if (filter === "all" || filter === "plate") {
+    sections.push(inventorySection("속성 형판", [{ label: "형판", value: save.currencies.plate, note: "보스와 후반 스테이지" }]));
+  }
+  if (filter === "all" || filter === "shard") {
+    sections.push(inventorySection("캐릭터 조각", CHARACTERS.map((unit) => ({ label: unit.name, value: save.inventory.shards[unit.id] || 0, note: "가챠 중복 변환" }))));
+  }
+  if (filter === "all" || filter === "etc") {
+    sections.push(inventorySection("기타", [{ label: "숨겨진 기록", value: save.achievements.hidden?.penta_mark || 0, note: "특별 업적 단서" }]));
+  }
+  return sections.join("");
+}
+
 function inventorySection(title, items) {
   return `
     <div class="inventory-section">
       <h4>${title}</h4>
-      <div class="inventory-grid">${items.map((item) => `<div class="inventory-tile"><strong>${formatNumber(item.value)}</strong><span>${item.label}</span></div>`).join("")}</div>
+      <div class="inventory-grid">${items.map((item) => `<div class="inventory-tile"><strong>${formatNumber(item.value)}</strong><span>${item.label}</span><small>${item.note || ""}</small></div>`).join("")}</div>
     </div>
   `;
+}
+
+function renderAchievementFilters() {
+  return `<div class="filter-row achievement-filter">${ACHIEVEMENT_CATEGORIES.map((category) => `<button class="filter-button ${save.achievements.filter === category.id ? "is-active" : ""}" data-action="set-achievement-filter" data-id="${category.id}" type="button">${category.label}</button>`).join("")}</div>`;
+}
+
+function achievementCard(achievement) {
+  const pct = Math.min(100, Math.round((achievement.progress.current / achievement.progress.target) * 100));
+  const disabled = achievement.disabled;
+  return `
+    <article class="achievement-card ${achievement.complete ? "is-complete" : ""} ${achievement.claimed ? "is-claimed" : ""} ${disabled ? "is-disabled" : ""}">
+      <div>
+        <span class="result-chip">${categoryName(achievement.category)}</span>
+        <strong>${achievement.displayName}</strong>
+        <p>${disabled ? "온라인/이벤트 버전 예정" : achievement.displayDescription}</p>
+      </div>
+      <div class="bar"><div class="bar-fill" style="width: ${pct}%"></div></div>
+      <div class="battle-topline">
+        <span>${formatNumber(achievement.progress.current)} / ${formatNumber(achievement.progress.target)}</span>
+        <span>${rewardText(achievement.reward || {})}</span>
+      </div>
+      <button class="small-button ${achievement.complete && !achievement.claimed ? "primary-button" : "ghost-button"}" data-action="claim-achievement" data-id="${achievement.id}" type="button" ${achievement.complete && !achievement.claimed ? "" : "disabled"}>${achievement.claimed ? "수령 완료" : "보상 수령"}</button>
+    </article>
+  `;
+}
+
+function categoryName(id) {
+  return ACHIEVEMENT_CATEGORIES.find((category) => category.id === id)?.label || id;
 }
 
 function settingRow(id, label, value) {
@@ -608,17 +753,27 @@ function selectRegion(id) {
 function startBattle(stageId) {
   const stage = getStage(stageId);
   if (!stage || !isStageOpen(stage.id) || !save.unlockedRegions.includes(stage.region)) return;
+  const boss = getBossByStage(stage.id);
   save.selectedRegion = stage.region;
   save.activeTab = "stage";
   save.stats.stagePlays += 1;
   save.battle = createBattle(save, stageId);
+  save.story.seenStageStart = save.story.seenStageStart || [];
+  const firstEntry = !save.story.seenStageStart.includes(stage.id);
+  if (firstEntry) addUnique(save.story.seenStageStart, stage.id);
   persist();
+  playSound(save, boss ? "boss" : "tap");
   vibrate(18);
   render();
+  if (firstEntry || boss) {
+    const story = getStageStory(stage.id);
+    showModal(boss ? "보스 접근" : "진입 기록", `<p>${boss ? story.boss || boss.description : story.start || stage.name}</p>`);
+  }
 }
 
 function tickBattleLoop() {
   if (!save.started || !save.battle) return;
+  if (els.modal?.open) return;
   const result = advanceBattle(save);
   if (result.status === "victory") {
     endBattle(true);
@@ -629,12 +784,14 @@ function tickBattleLoop() {
     return;
   }
   persist();
+  playSound(save, "hit");
   if (save.activeTab === "stage") render();
 }
 
 function useSkill(unitId) {
   const result = fireSkill(save, unitId);
   if (!result.ok) return;
+  playSound(save, "ex");
   vibrate(24);
   if (result.status === "victory") {
     endBattle(true);
@@ -654,13 +811,20 @@ function endBattle(victory, retreated = false) {
   const battle = save.battle;
   if (!battle) return;
   const stage = getStage(battle.stageId);
+  const boss = getBossByStage(stage.id);
   save.battle = null;
 
   if (victory) {
     const firstClear = !save.clearedStages.includes(stage.id);
     const reward = clone(firstClear ? stage.firstReward : stage.repeatReward);
     grantReward(reward);
+    save.stats.accountExp += stage.order * 85 + (boss ? 240 : 0);
     save.stats.wins += 1;
+    if (boss) {
+      save.stats.bossKills += 1;
+      save.stats.lastBossDate = todayKey();
+      save.stats.sameDayBossKills += 1;
+    }
     updateMission(save, "stageClear", 1);
 
     if (firstClear) {
@@ -673,6 +837,7 @@ function endBattle(victory, retreated = false) {
     persist();
     render();
     showRewardModal(stage, reward, firstClear);
+    playSound(save, "victory");
     toast(`${stage.name} 클리어`);
     return;
   }
@@ -699,10 +864,13 @@ function grantReward(reward) {
 }
 
 function showRewardModal(stage, reward, firstClear) {
+  const boss = getBossByStage(stage.id);
+  const story = getStageStory(stage.id);
   showModal(
-    firstClear ? "최초 클리어" : "탐색 완료",
+    boss ? "보스 제압" : firstClear ? "최초 클리어" : "탐색 완료",
     `
-      <p>${stage.name} 보상이 지급되었습니다.</p>
+      <p>${story.clear || `${stage.name} 보상이 지급되었습니다.`}</p>
+      ${boss ? `<p class="stage-note">${boss.rewardText}</p>` : ""}
       <div class="result-grid">
         ${Object.entries(reward).map(([key, value]) => `<div class="gacha-result"><strong>${value}</strong><span>${rewardName(key)}</span></div>`).join("")}
       </div>
@@ -716,6 +884,7 @@ function upgradeUnit(id) {
   updateMission(save, "upgrade", 1);
   addRecent(save, `${unit.name} Lv.${save.units[id].level} 강화`);
   persist(`${unit.name} 강화 완료`);
+  playSound(save, "upgrade");
   vibrate(18);
   render();
 }
@@ -745,6 +914,8 @@ function pullGacha(count) {
       results.push({
         name: character.name,
         grade: character.grade,
+        gradeClass: gradeClass(character.grade),
+        duplicate: true,
         detail: `중복 변환 · 조각 +${duplicateReward.shards}`,
       });
     } else {
@@ -753,6 +924,8 @@ function pullGacha(count) {
       results.push({
         name: character.name,
         grade: character.grade,
+        gradeClass: gradeClass(character.grade),
+        duplicate: false,
         detail: "신규 획득",
       });
     }
@@ -764,8 +937,15 @@ function pullGacha(count) {
   addRecent(save, `${count}회 추첨 완료`);
   persist();
   render();
+  playSound(save, "gacha");
   vibrate(26);
-  showModal("추첨 결과", `<div class="result-grid">${results.map(resultTile).join("")}</div>`);
+  showModal(results.some((result) => result.grade === "ANTIQUE POWER") ? "고대 신호 감지" : "추첨 결과", `<div class="result-grid">${results.map(resultTile).join("")}</div>`);
+}
+
+function gradeClass(grade) {
+  if (grade === "ANTIQUE POWER") return "grade-antique";
+  if (grade === "MYSTIC") return "grade-mystic";
+  return "grade-rare";
 }
 
 function pickGachaCharacter() {
@@ -780,6 +960,34 @@ function claimDailyMission(id) {
   if (!reward) return;
   addRecent(save, `미션 보상 수령 · ${rewardText(reward)}`);
   persist("미션 보상 수령");
+  render();
+}
+
+function setInventoryFilter(id) {
+  save.ui.inventoryFilter = id;
+  persist();
+  render();
+}
+
+function setAchievementFilter(id) {
+  save.achievements.filter = id;
+  persist();
+  render();
+}
+
+function claimAchievementReward(id) {
+  const reward = claimAchievement(save, id);
+  if (!reward) return;
+  addRecent(save, `업적 보상 수령 · ${rewardText(reward)}`);
+  persist("업적 보상 수령");
+  playSound(save, "upgrade");
+  render();
+}
+
+function revealHidden(id) {
+  triggerHiddenAchievement(save, id);
+  addRecent(save, "숨겨진 기록 발견");
+  persist("숨겨진 기록 발견");
   render();
 }
 
