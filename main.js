@@ -1,17 +1,20 @@
 import { ACHIEVEMENT_CATEGORIES } from "./data/achievements.js";
+import { ATTRIBUTE_TIERS, getAttribute } from "./data/attributes.js";
 import { getBossByStage } from "./data/bosses.js";
-import { ATTRIBUTES, ATTRIBUTE_ADVANTAGE, CHARACTERS, CURRENCIES, attributeLabel, getCharacter } from "./data/characters.js";
+import { ATTRIBUTES, CHARACTERS, CURRENCIES, attributeLabel, getCharacter } from "./data/characters.js";
+import { CODEX_FILTERS, GEMS, ITEM_GUIDE, MINERALS, REFINING_RULES } from "./data/economy.js";
 import { getEnemy } from "./data/enemies.js";
-import { GACHA } from "./data/gacha.js";
+import { GACHA, gachaRateRows } from "./data/gacha.js";
 import { UPDATE_LOG, getRegionStory, getStageStory } from "./data/story.js";
 import { REGIONS, STAGES, getNextStage, getRegion, getStage } from "./data/stages.js";
 import { achievementSummary, claimAchievement, ensureAchievements, getAchievementRows, getPlayerLevel, recommendedAttributeFor, triggerHiddenAchievement } from "./systems/achievement.js";
+import { canOpenTemplate, canSynthesizeTemplate, ensureAttributeState, grantTemplate, openAttributeTemplate, parseTemplateRewardKey, synthesizeTemplate, templateChanceText, templateName } from "./systems/attributeTemplate.js";
 import { playSound } from "./systems/audio.js";
 import { battleSummary, createBattle, tickBattle as advanceBattle, useCoreBurst as fireCoreBurst, useSkill as fireSkill } from "./systems/battle.js";
 import { battlePartyPower, formationSummary, getBattleParty, toggleFormation } from "./systems/formation.js";
 import { DAILY_MISSIONS, WEEKLY_MISSIONS, claimMission, ensureDailyMissions, updateMission } from "./systems/mission.js";
 import { SAVE_VERSION, addRecent, addUnique, createDefaultSave, loadSave, resetSave, saveGame } from "./systems/save.js";
-import { allUnitCards, applyUpgrade, canUpgrade, upgradeCost } from "./systems/upgrade.js";
+import { allUnitCards, applyExtUpgrade, applyUpgrade, canPromoteDeepMind, canPromoteMind, canUpgrade, canUpgradeExt, extCost, mindLabel, promoteDeepMind, promoteMind, upgradeCost } from "./systems/upgrade.js";
 import { clone, formatNumber, mix, rewardName, rewardText, todayKey, weightedPick } from "./systems/ui.js";
 
 let save = loadSave();
@@ -33,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   ensureDailyMissions(save);
   ensureAchievements(save);
+  ensureAttributeState(save);
   wireEvents();
   syncStartScreen();
   render();
@@ -53,6 +57,7 @@ function wireEvents() {
     save.started = true;
     ensureDailyMissions(save);
     ensureAchievements(save);
+    ensureAttributeState(save);
     playSound(save, "tap");
     persist("게스트 데이터가 생성되었습니다.");
     syncStartScreen();
@@ -62,6 +67,7 @@ function wireEvents() {
   els.continueButton.addEventListener("click", () => {
     save.started = true;
     ensureAchievements(save);
+    ensureAttributeState(save);
     playSound(save, "tap");
     persist();
     syncStartScreen();
@@ -89,10 +95,16 @@ function wireEvents() {
     if (action === "retreat") endBattle(false, true);
     if (action === "speed") setBattleSpeed(Number(id));
     if (action === "upgrade") upgradeUnit(id);
+    if (action === "upgrade-ext") upgradeUnitExt(id);
+    if (action === "promote-mind") promoteUnitMind(id);
+    if (action === "promote-deepmind") promoteUnitDeepMind(id);
     if (action === "toggle-formation") toggleUnitFormation(id);
     if (action === "pull") pullGacha(Number(count));
+    if (action === "open-template") openTemplate(Number(id));
+    if (action === "synthesize-template") synthesizeTemplateTier(Number(id));
     if (action === "claim-mission") claimDailyMission(id);
     if (action === "set-inventory-filter") setInventoryFilter(id);
+    if (action === "set-codex-filter") setCodexFilter(id);
     if (action === "set-achievement-filter") setAchievementFilter(id);
     if (action === "claim-achievement") claimAchievementReward(id);
     if (action === "hidden-trigger") revealHidden(id);
@@ -101,6 +113,7 @@ function wireEvents() {
     if (action === "load") {
       save = loadSave();
       ensureDailyMissions(save);
+      ensureAttributeState(save);
       syncStartScreen();
       render();
       toast("불러왔습니다.");
@@ -140,6 +153,7 @@ function render() {
 
   ensureDailyMissions(save);
   ensureAchievements(save);
+  ensureAttributeState(save);
   const views = {
     home: renderHome,
     stage: renderStage,
@@ -152,7 +166,7 @@ function render() {
 }
 
 function renderWallet() {
-  els.wallet.innerHTML = CURRENCIES.map((currency) => {
+  els.wallet.innerHTML = CURRENCIES.filter((currency) => currency.wallet).map((currency) => {
     return `
       <div class="wallet-item">
         <span class="wallet-symbol">${currency.symbol}</span>
@@ -360,7 +374,7 @@ function renderUnit() {
       <div class="split-copy">
         <p class="eyebrow">UNIT</p>
         <h2>코어 각성자</h2>
-        <p>0.4부터 실제 전투는 편성된 파티와 패시브 조합을 기준으로 계산됩니다.</p>
+        <p>0.5부터 ExT, 마인드, 딥마인드 성장 규칙이 세이브에 반영됩니다.</p>
       </div>
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="unit" aria-label="속성 문양"></canvas>
@@ -389,18 +403,19 @@ function renderUnit() {
 
 function renderGacha() {
   const remainingPity = Math.max(0, GACHA.pityTarget - save.gacha.pity);
+  const poolCharacters = GACHA.pool.map((entry) => getCharacter(entry.character)).filter(Boolean);
   return `
     <section class="gacha-band">
       <div class="gacha-copy">
         <p class="eyebrow">GACHA</p>
         <h2>${GACHA.name}</h2>
-        <p>현재 픽업 없음. 이미 보유한 유닛은 조각과 재화로 변환됩니다.</p>
+        <p>현재 픽업 없음. 기본 확률표 기준으로 소환되며, 이미 보유한 유닛은 조각과 레드블링으로 변환됩니다.</p>
         <div class="gacha-actions">
           <button class="primary-button" data-action="pull" data-count="1" type="button" ${save.currencies.quartz < GACHA.singleCost ? "disabled" : ""}>1회 Q${GACHA.singleCost}</button>
           <button class="ghost-button" data-action="pull" data-count="10" type="button" ${save.currencies.quartz < GACHA.tenCost ? "disabled" : ""}>10회 Q${GACHA.tenCost}</button>
         </div>
         <div class="gacha-rate">
-          <span>ANTIQUE POWER 8% · MYSTIC 18% · RARE 74%</span>
+          <span>${gachaRateRows().map((row) => `${row.grade} ${row.rate}%`).join(" · ")}</span>
           <span>${remainingPity <= 5 ? "천장 임박" : "천장까지"} ${remainingPity}회 · 중복은 자동 변환</span>
         </div>
       </div>
@@ -416,7 +431,17 @@ function renderGacha() {
           <h3>획득 가능 목록</h3>
         </div>
       </div>
-      <div class="unit-grid">${CHARACTERS.map(poolTile).join("")}</div>
+      <div class="unit-grid">${poolCharacters.map(poolTile).join("")}</div>
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">RATE</p>
+          <h3>기본 확률 공지</h3>
+        </div>
+      </div>
+      <div class="codex-grid">${gachaRateRows().map(rateTile).join("")}</div>
     </section>
 
     <section class="full-band">
@@ -442,6 +467,27 @@ function renderMenu() {
       </div>
       ${renderInventoryFilters()}
       ${renderFilteredInventory()}
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">ATTRIBUTE</p>
+          <h3>속성 형판</h3>
+        </div>
+        <span class="pill">${save.attributes.owned.length}/${Object.keys(ATTRIBUTES).length} 속성</span>
+      </div>
+      ${renderAttributeLab()}
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">CODEX</p>
+          <h3>재화·광물 도감</h3>
+        </div>
+      </div>
+      ${renderCodex()}
     </section>
 
     <section class="full-band">
@@ -615,7 +661,11 @@ function skillButton(unit, battle, enemy) {
 function unitTile(unit) {
   const element = ATTRIBUTES[unit.element];
   const cost = unit.owned ? upgradeCost(unit.state) : null;
+  const nextExtCost = unit.owned ? extCost(unit.state, unit) : null;
   const inFormation = save.formation.includes(unit.id);
+  const ext = Number(unit.state?.ext || 0);
+  const mind = Number(unit.state?.mind || 0);
+  const deepMind = Number(unit.state?.deepMind || 0);
   return `
     <article class="unit-tile ${unit.owned ? "" : "is-locked"}">
       <div class="unit-title">
@@ -634,12 +684,21 @@ function unitTile(unit) {
         ${statChip("DEF", unit.stats.def)}
         ${statChip("SPD", unit.stats.speed)}
       </div>
+      <div class="growth-strip">
+        <span>ExT +${ext}/20</span>
+        <span>Mind ${mindLabel(mind, "/V")}</span>
+        <span>D Mind ${deepMind}/III</span>
+      </div>
       <p class="unit-meta">EX ${unit.ex.name}: ${unit.ex.description}</p>
       <p class="unit-meta">PASSIVE ${unit.passive?.name}: ${unit.passive?.description}</p>
       ${unit.owned ? `<div class="unit-meta">다음 ${unit.nextStats.hp}/${unit.nextStats.atk}/${unit.nextStats.def} · 비용 ${costText(cost)}</div>` : ""}
+      ${unit.owned && nextExtCost ? `<div class="unit-meta">ExT +${nextExtCost.next} · 쿼츠 ${formatNumber(nextExtCost.quartz)}${nextExtCost.bling ? ` · 해방 레드블링 ${nextExtCost.bling}` : ""}</div>` : ""}
       <div class="actions">
         <button class="small-button ${inFormation ? "primary-button" : "ghost-button"}" data-action="toggle-formation" data-id="${unit.id}" type="button" ${unit.owned ? "" : "disabled"}>${inFormation ? "편성중" : "편성"}</button>
         <button class="small-button ${unit.owned ? "primary-button" : "ghost-button"}" data-action="upgrade" data-id="${unit.id}" type="button" ${canUpgrade(save, unit.id) ? "" : "disabled"}>강화</button>
+        <button class="small-button ${canUpgradeExt(save, unit.id) ? "primary-button" : "ghost-button"}" data-action="upgrade-ext" data-id="${unit.id}" type="button" ${canUpgradeExt(save, unit.id) ? "" : "disabled"}>ExT</button>
+        <button class="small-button ghost-button" data-action="promote-mind" data-id="${unit.id}" type="button" ${canPromoteMind(save, unit.id) ? "" : "disabled"}>Mind</button>
+        <button class="small-button ghost-button" data-action="promote-deepmind" data-id="${unit.id}" type="button" ${canPromoteDeepMind(save, unit.id) ? "" : "disabled"}>D Mind</button>
       </div>
     </article>
   `;
@@ -650,6 +709,7 @@ function statChip(label, value) {
 }
 
 function costText(cost) {
+  if (!cost) return "-";
   return Object.entries(cost)
     .filter(([, value]) => value > 0)
     .map(([key, value]) => `${rewardName(key)} ${value}`)
@@ -685,6 +745,100 @@ function resultTile(result) {
   `;
 }
 
+function rateTile(row) {
+  return `
+    <article class="codex-tile">
+      <strong>${row.grade} · ${row.rate}%</strong>
+      <span>${row.names.join(" / ")}</span>
+    </article>
+  `;
+}
+
+function renderAttributeLab() {
+  const visibleTiers = ATTRIBUTE_TIERS.filter(({ tier }) => tier <= 5 || (save.attributes.templates[tier] || 0) > 0);
+  return `
+    <div class="attribute-chip-row">
+      ${save.attributes.owned.map(attributeChip).join("")}
+    </div>
+    <div class="template-list">
+      ${visibleTiers.map(templateRow).join("")}
+    </div>
+    ${
+      save.attributes.history.length
+        ? `<div class="recent-list template-history">${save.attributes.history.slice(0, 4).map((item) => `<div class="recent-row">${item.text}</div>`).join("")}</div>`
+        : `<p class="empty-copy">I형 속성 형판 3개를 합성하거나 개봉해 속성을 획득할 수 있습니다.</p>`
+    }
+  `;
+}
+
+function attributeChip(id) {
+  const attribute = getAttribute(id);
+  return `<span class="attribute-chip" style="--attribute:${attribute.color}">${attribute.sigil} ${attribute.name}</span>`;
+}
+
+function templateRow({ tier }) {
+  const count = save.attributes.templates[tier] || 0;
+  return `
+    <article class="template-row">
+      <div>
+        <strong>${templateName(tier)}</strong>
+        <span>${count}개 · ${templateChanceText(tier)} · 같은 형판 3개로 상위 합성</span>
+      </div>
+      <div class="template-actions">
+        <button class="small-button ghost-button" data-action="synthesize-template" data-id="${tier}" type="button" ${canSynthesizeTemplate(save, tier) ? "" : "disabled"}>합성</button>
+        <button class="small-button primary-button" data-action="open-template" data-id="${tier}" type="button" ${canOpenTemplate(save, tier) ? "" : "disabled"}>개봉</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderCodex() {
+  const active = save.ui.codexFilter || "currency";
+  return `
+    <div class="filter-row">${CODEX_FILTERS.map((filter) => `<button class="filter-button ${active === filter.id ? "is-active" : ""}" data-action="set-codex-filter" data-id="${filter.id}" type="button">${filter.label}</button>`).join("")}</div>
+    <div class="codex-grid">${codexItems(active).map(codexTile).join("")}</div>
+  `;
+}
+
+function codexItems(filter) {
+  if (filter === "currency") {
+    return CURRENCIES.map((currency) => ({
+      title: `${currency.symbol} ${currency.name}`,
+      meta: `${formatNumber(save.currencies[currency.id] || 0)} 보유`,
+      detail: currency.description,
+    }));
+  }
+  if (filter === "mineral") {
+    return MINERALS.map((mineral) => ({
+      title: mineral.name,
+      meta: `최대 ${formatNumber(mineral.max)} · 1kg ${formatNumber(mineral.basePrice)}Q`,
+      detail: `${mineral.recipes.join(" / ")} · 제련비 ${formatNumber(REFINING_RULES.quartzCost)}Q`,
+    }));
+  }
+  if (filter === "gem") {
+    return GEMS.map((gem) => ({
+      title: gem.name,
+      meta: `${formatNumber(gem.value)}Q · 확률 ${gem.chance}`,
+      detail: "원시보석 3개를 합성하면 보석 하나가 랜덤으로 등장합니다.",
+    }));
+  }
+  return ITEM_GUIDE.map((item) => ({
+    title: item.name,
+    meta: "아이템 가이드",
+    detail: item.description,
+  }));
+}
+
+function codexTile(item) {
+  return `
+    <article class="codex-tile">
+      <strong>${item.title}</strong>
+      <span>${item.meta}</span>
+      <small>${item.detail}</small>
+    </article>
+  `;
+}
+
 function renderInventoryFilters() {
   const filters = [
     ["all", "전체"],
@@ -712,11 +866,17 @@ function renderFilteredInventory() {
     ]));
   }
   if (filter === "all" || filter === "plate") {
+    const templateItems = ATTRIBUTE_TIERS.filter(({ tier }) => (save.attributes.templates[tier] || 0) > 0).map(({ tier }) => ({
+      label: templateName(tier),
+      value: save.attributes.templates[tier] || 0,
+      note: templateChanceText(tier),
+    }));
     sections.push(inventorySection("속성 형판", [
       { label: "형판", value: save.currencies.plate, note: "보스와 후반 스테이지" },
       { label: "도심 제어 코어", value: save.inventory.materials.controlCore || 0, note: "피온스 보스 반복 보상" },
       { label: "무역 집행 인장", value: save.inventory.materials.tradeSeal || 0, note: "트로맨션 보스 반복 보상" },
       { label: "오염 수핵", value: save.inventory.materials.aquaCore || 0, note: "오로시스 보스 반복 보상" },
+      ...templateItems,
     ]));
   }
   if (filter === "all" || filter === "shard") {
@@ -919,6 +1079,11 @@ function endBattle(victory, retreated = false) {
 function grantReward(reward) {
   let earnedCurrency = 0;
   Object.entries(reward).forEach(([key, value]) => {
+    const templateTier = parseTemplateRewardKey(key);
+    if (templateTier) {
+      grantTemplate(save, templateTier, value);
+      return;
+    }
     if (key in save.currencies) {
       save.currencies[key] += value;
       earnedCurrency += value;
@@ -953,6 +1118,34 @@ function upgradeUnit(id) {
   persist(`${unit.name} 강화 완료`);
   playSound(save, "upgrade");
   vibrate(18);
+  render();
+}
+
+function upgradeUnitExt(id) {
+  const unit = getCharacter(id);
+  if (!unit || !applyExtUpgrade(save, id)) return;
+  addRecent(save, `${unit.name} ExT +${save.units[id].ext}`);
+  persist(`${unit.name} ExT 강화`);
+  playSound(save, "upgrade");
+  vibrate(18);
+  render();
+}
+
+function promoteUnitMind(id) {
+  const unit = getCharacter(id);
+  if (!unit || !promoteMind(save, id)) return;
+  addRecent(save, `${unit.name} Mind ${mindLabel(save.units[id].mind)} 상승`);
+  persist(`${unit.name} Mind 상승`);
+  playSound(save, "upgrade");
+  render();
+}
+
+function promoteUnitDeepMind(id) {
+  const unit = getCharacter(id);
+  if (!unit || !promoteDeepMind(save, id)) return;
+  addRecent(save, `${unit.name} Deep Mind ${save.units[id].deepMind} 상승`);
+  persist(`${unit.name} Deep Mind 상승`);
+  playSound(save, "upgrade");
   render();
 }
 
@@ -995,7 +1188,7 @@ function pullGacha(count) {
         detail: `중복 변환 · 조각 +${duplicateReward.shards}`,
       });
     } else {
-      save.units[character.id] = { level: 1, shards: 0, dupes: 0, upgrades: 0 };
+      save.units[character.id] = { level: 1, shards: 0, dupes: 0, upgrades: 0, ext: 0, mind: 0, deepMind: 0, insaneSpecUnlocked: false };
       save.inventory.shards[character.id] = save.inventory.shards[character.id] || 0;
       results.push({
         name: character.name,
@@ -1018,9 +1211,31 @@ function pullGacha(count) {
   showModal(results.some((result) => result.grade === "ANTIQUE POWER") ? "고대 신호 감지" : "추첨 결과", `<div class="result-grid">${results.map(resultTile).join("")}</div>`);
 }
 
+function synthesizeTemplateTier(tier) {
+  const result = synthesizeTemplate(save, tier);
+  if (!result) return;
+  save.stats.attributeTemplateSyntheses = (save.stats.attributeTemplateSyntheses || 0) + 1;
+  addRecent(save, result.text);
+  persist("속성 형판 합성");
+  playSound(save, "upgrade");
+  render();
+}
+
+function openTemplate(tier) {
+  const result = openAttributeTemplate(save, tier);
+  if (!result) return;
+  save.stats.attributeTemplatesOpened = (save.stats.attributeTemplatesOpened || 0) + 1;
+  addRecent(save, result.text);
+  persist(result.duplicate ? "중복 속성 보정" : `${result.attribute.name} 속성 획득`);
+  playSound(save, "gacha");
+  vibrate(18);
+  render();
+  showModal("속성 형판 개봉", `<div class="result-grid"><div class="gacha-result ${result.duplicate ? "" : "grade-mystic"}"><span class="result-chip">${templateName(result.tier)}</span><strong>${result.attribute.sigil} ${result.attribute.name}</strong><span>${result.duplicate ? "중복 보정 · 형판 조각과 레드블링 지급" : "신규 속성 획득"}</span></div></div>`);
+}
+
 function gradeClass(grade) {
   if (grade === "ANTIQUE POWER") return "grade-antique";
-  if (grade === "MYSTIC") return "grade-mystic";
+  if (["UNIQUE", "SPECIAL", "ANCIENT", "MYTH", "MYSTIC"].includes(grade)) return "grade-mystic";
   return "grade-rare";
 }
 
@@ -1041,6 +1256,12 @@ function claimDailyMission(id) {
 
 function setInventoryFilter(id) {
   save.ui.inventoryFilter = id;
+  persist();
+  render();
+}
+
+function setCodexFilter(id) {
+  save.ui.codexFilter = id;
   persist();
   render();
 }
@@ -1091,6 +1312,7 @@ function resetGame() {
   save = resetSave();
   save.started = true;
   ensureDailyMissions(save);
+  ensureAttributeState(save);
   persist();
   closeModal();
   syncStartScreen();

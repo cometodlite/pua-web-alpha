@@ -2,13 +2,17 @@ import { CHARACTERS, getCharacter } from "../data/characters.js";
 
 export function getUnitStats(character, unitState) {
   const level = unitState?.level || 1;
+  const ext = Number(unitState?.ext || 0);
+  const mind = Number(unitState?.mind || 0);
+  const deepMind = Number(unitState?.deepMind || 0);
   const bonusTier = Math.floor(level / 5);
+  const mindMultiplier = 1 + mind * 0.025 + deepMind * 0.06;
   return {
-    hp: Math.round(character.base.hp + character.growth.hp * (level - 1) + bonusTier * 24),
-    atk: Math.round(character.base.atk + character.growth.atk * (level - 1) + bonusTier * 4),
-    def: Math.round(character.base.def + character.growth.def * (level - 1) + bonusTier * 3),
-    speed: Number((character.base.speed + character.growth.speed * (level - 1)).toFixed(1)),
-    crit: Math.min(0.35, character.base.crit + bonusTier * 0.015),
+    hp: Math.round((character.base.hp + character.growth.hp * (level - 1) + bonusTier * 24 + ext * 8) * mindMultiplier),
+    atk: Math.round((character.base.atk + character.growth.atk * (level - 1) + bonusTier * 4 + ext * 2) * mindMultiplier),
+    def: Math.round((character.base.def + character.growth.def * (level - 1) + bonusTier * 3 + Math.floor(ext / 2)) * mindMultiplier),
+    speed: Number((character.base.speed + character.growth.speed * (level - 1) + Math.floor(ext / 5) * 0.2).toFixed(1)),
+    crit: Math.min(0.42, character.base.crit + bonusTier * 0.015 + Math.floor(ext / 5) * 0.005 + deepMind * 0.01),
   };
 }
 
@@ -42,6 +46,20 @@ export function upgradeCost(unitState) {
   return cost;
 }
 
+export function extCost(unitState, character) {
+  const ext = Number(unitState?.ext || 0);
+  const next = ext + 1;
+  if (next > 20) return null;
+  const quartz = next <= 5 ? 20000 : next <= 10 ? 40000 : next <= 15 ? 70000 : 100000;
+  const needsLiberation = Boolean(character?.insaneSpec && next >= 11 && !unitState?.insaneSpecUnlocked);
+  return {
+    next,
+    quartz,
+    bling: needsLiberation ? 50 : 0,
+    needsLiberation,
+  };
+}
+
 export function canUpgrade(save, id) {
   const unit = save.units[id];
   if (!unit) return false;
@@ -52,6 +70,15 @@ export function canUpgrade(save, id) {
     if (key in save.currencies) return (save.currencies[key] || 0) >= value;
     return (save.inventory.materials[key] || 0) >= value;
   });
+}
+
+export function canUpgradeExt(save, id) {
+  const unit = save.units[id];
+  const character = getCharacter(id);
+  if (!unit || !character) return false;
+  const cost = extCost(unit, character);
+  if (!cost) return false;
+  return (save.currencies.quartz || 0) >= cost.quartz && (save.currencies.bling || 0) >= (cost.bling || 0);
 }
 
 export function applyUpgrade(save, id) {
@@ -70,6 +97,59 @@ export function applyUpgrade(save, id) {
   unit.upgrades += 1;
   save.stats.upgrades += 1;
   return true;
+}
+
+export function applyExtUpgrade(save, id) {
+  if (!canUpgradeExt(save, id)) return false;
+  const unit = save.units[id];
+  const character = getCharacter(id);
+  const cost = extCost(unit, character);
+  save.currencies.quartz -= cost.quartz;
+  if (cost.bling) {
+    save.currencies.bling -= cost.bling;
+    unit.insaneSpecUnlocked = true;
+  }
+  unit.ext = cost.next;
+  save.stats.spent += cost.quartz + (cost.bling || 0);
+  return true;
+}
+
+export function canPromoteMind(save, id) {
+  const unit = save.units[id];
+  if (!unit) return false;
+  return Number(unit.ext || 0) >= 20 && Number(unit.mind || 0) < 5;
+}
+
+export function promoteMind(save, id) {
+  if (!canPromoteMind(save, id)) return false;
+  const unit = save.units[id];
+  unit.mind = Number(unit.mind || 0) + 1;
+  unit.ext = 0;
+  unit.insaneSpecUnlocked = false;
+  save.stats.mindPromotions = (save.stats.mindPromotions || 0) + 1;
+  return true;
+}
+
+export function canPromoteDeepMind(save, id) {
+  const unit = save.units[id];
+  if (!unit) return false;
+  return Number(unit.mind || 0) >= 5 && Number(unit.deepMind || 0) < 3;
+}
+
+export function promoteDeepMind(save, id) {
+  if (!canPromoteDeepMind(save, id)) return false;
+  const unit = save.units[id];
+  unit.deepMind = Number(unit.deepMind || 0) + 1;
+  unit.mind = 0;
+  unit.ext = 0;
+  unit.insaneSpecUnlocked = false;
+  save.stats.deepMindPromotions = (save.stats.deepMindPromotions || 0) + 1;
+  return true;
+}
+
+export function mindLabel(value, maxLabel = "") {
+  const labels = ["0", "I", "II", "III", "IV", "V"];
+  return `${labels[Number(value) || 0] || "0"}${maxLabel}`;
 }
 
 export function allUnitCards(save) {

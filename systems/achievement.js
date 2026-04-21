@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS } from "../data/achievements.js";
-import { ATTRIBUTE_ADVANTAGE, CHARACTERS } from "../data/characters.js";
+import { CHARACTERS } from "../data/characters.js";
+import { recommendedAttributeFor as recommendedByRelation } from "../data/attributes.js";
 import { STAGES } from "../data/stages.js";
 import { getBossByStage } from "../data/bosses.js";
 import { battlePartyPower } from "./formation.js";
@@ -106,7 +107,7 @@ function grantAchievementReward(save, reward) {
 }
 
 export function recommendedAttributeFor(enemyElement) {
-  return Object.entries(ATTRIBUTE_ADVANTAGE).find(([, target]) => target === enemyElement)?.[0] || "star";
+  return recommendedByRelation(enemyElement);
 }
 
 export function bossClearCount(save) {

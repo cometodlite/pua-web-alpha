@@ -1,9 +1,11 @@
 import { STAGES } from "../data/stages.js";
+import { CURRENCIES } from "../data/economy.js";
+import { normalizeAttributeState } from "./attributeTemplate.js";
 import { clone, todayKey } from "./ui.js";
 
 export const SAVE_KEY = "pua_save";
 export const LEGACY_SAVE_KEY = "pua-web-alpha-01";
-export const SAVE_VERSION = "0.4.0";
+export const SAVE_VERSION = "0.5.0";
 
 export const defaultSave = {
   version: SAVE_VERSION,
@@ -11,18 +13,31 @@ export const defaultSave = {
   activeTab: "home",
   selectedRegion: "pions",
   currencies: {
-    quartz: 1200,
+    quartz: 30000,
     bling: 500,
+    blueBling: 0,
     plate: 0,
+    pureBling: 0,
+    alPoint: 0,
+    medal: 0,
+    stardust: 0,
+    mileage: 0,
+    shiningMileage: 0,
+    powerGem: 0,
   },
   units: {
-    mepi: { level: 1, shards: 0, dupes: 0, upgrades: 0 },
-    noark: { level: 1, shards: 0, dupes: 0, upgrades: 0 },
+    mepi: { level: 1, shards: 0, dupes: 0, upgrades: 0, ext: 0, mind: 0, deepMind: 0, insaneSpecUnlocked: false },
+    noark: { level: 1, shards: 0, dupes: 0, upgrades: 0, ext: 0, mind: 0, deepMind: 0, insaneSpecUnlocked: false },
   },
   inventory: {
     materials: { core: 0, dust: 0, key: 0 },
     shards: {},
     items: {},
+  },
+  attributes: {
+    owned: ["star", "quantum"],
+    templates: { 1: 3 },
+    history: [],
   },
   clearedStages: [],
   unlockedStages: ["pions-01"],
@@ -63,6 +78,10 @@ export const defaultSave = {
     purchases: 0,
     expensivePurchases: 0,
     spent: 0,
+    attributeTemplatesOpened: 0,
+    attributeTemplateSyntheses: 0,
+    mindPromotions: 0,
+    deepMindPromotions: 0,
   },
   achievements: {
     filter: "all",
@@ -76,6 +95,7 @@ export const defaultSave = {
   ui: {
     inventoryFilter: "all",
     unitFilter: "all",
+    codexFilter: "currency",
   },
   recent: [],
   battle: null,
@@ -118,11 +138,15 @@ export function resetSave() {
 export function normalizeSave(incoming) {
   const base = clone(defaultSave);
   const source = incoming && typeof incoming === "object" ? incoming : {};
+  const sourceCurrencies = { ...(source.currencies || {}) };
+  CURRENCIES.forEach((currency) => {
+    if (!(currency.id in sourceCurrencies)) sourceCurrencies[currency.id] = base.currencies[currency.id] || 0;
+  });
   const save = {
     ...base,
     ...source,
     version: SAVE_VERSION,
-    currencies: { ...base.currencies, ...(source.currencies || {}) },
+    currencies: { ...base.currencies, ...sourceCurrencies },
     units: { ...base.units, ...(source.units || source.ownedUnits || {}) },
     inventory: {
       materials: { ...base.inventory.materials, ...(source.inventory?.materials || {}) },
@@ -176,9 +200,15 @@ export function normalizeSave(incoming) {
       shards: Number(save.units[id]?.shards || 0),
       dupes: Number(save.units[id]?.dupes || 0),
       upgrades: Number(save.units[id]?.upgrades || 0),
+      ext: Number(save.units[id]?.ext || 0),
+      mind: Number(save.units[id]?.mind || 0),
+      deepMind: Number(save.units[id]?.deepMind || 0),
+      insaneSpecUnlocked: Boolean(save.units[id]?.insaneSpecUnlocked),
     };
     save.inventory.shards[id] = Number(save.inventory.shards[id] || save.units[id].shards || 0);
   });
+
+  save.attributes = normalizeAttributeState(source.attributes || base.attributes);
 
   const ownedIds = Object.keys(save.units);
   const sourceFormation = Array.isArray(source.formation) ? source.formation : base.formation;

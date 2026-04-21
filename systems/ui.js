@@ -12,10 +12,20 @@ export function todayKey() {
 }
 
 export function rewardName(key) {
+  const templateMatch = /^template(\d+)$/.exec(key);
+  if (templateMatch) return `${tierLabel(templateMatch[1])}형 속성 형판`;
   const names = {
     quartz: "쿼츠",
-    bling: "블링",
-    plate: "형판",
+    bling: "레드블링",
+    blueBling: "블루블링",
+    plate: "형판 조각",
+    pureBling: "퓨어 블링",
+    alPoint: "AL 포인트",
+    medal: "메달",
+    stardust: "스타 더스트",
+    mileage: "마일리지",
+    shiningMileage: "샤이닝 마일리지",
+    powerGem: "파워젬",
     core: "코어 조각",
     dust: "양자 분진",
     key: "공허 키",
@@ -25,6 +35,11 @@ export function rewardName(key) {
     bossMaterial: "보스 재료",
   };
   return names[key] || key;
+}
+
+function tierLabel(tier) {
+  const labels = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV"];
+  return labels[Number(tier)] || "I";
 }
 
 export function rewardText(reward) {

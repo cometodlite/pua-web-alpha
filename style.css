@@ -380,6 +380,7 @@ button:disabled {
 .unit-grid,
 .inventory-grid,
 .achievement-grid,
+.codex-grid,
 .region-grid,
 .result-grid,
 .mission-list,
@@ -387,7 +388,9 @@ button:disabled {
 .stat-grid,
 .speed-row,
 .filter-row,
-.achievement-list {
+.achievement-list,
+.attribute-chip-row,
+.template-list {
   display: grid;
   gap: 10px;
 }
@@ -402,6 +405,7 @@ button:disabled {
 .unit-tile,
 .inventory-tile,
 .achievement-tile,
+.codex-tile,
 .region-tab,
 .gacha-result,
 .mission-row,
@@ -411,7 +415,9 @@ button:disabled {
 .guide-card,
 .achievement-card,
 .filter-button,
-.ex-cutin {
+.ex-cutin,
+.template-row,
+.attribute-chip {
   background: rgba(245, 239, 225, 0.055);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -495,7 +501,8 @@ button:disabled {
 .stage-grid,
 .unit-grid,
 .inventory-grid,
-.achievement-grid {
+.achievement-grid,
+.codex-grid {
   grid-template-columns: 1fr;
 }
 
@@ -699,6 +706,24 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.growth-strip {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.growth-strip span {
+  background: rgba(94, 200, 183, 0.1);
+  border: 1px solid rgba(94, 200, 183, 0.22);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 900;
+  min-height: 32px;
+  padding: 8px 6px;
+  text-align: center;
+}
+
 .stat-chip {
   color: var(--ink);
   font-size: 0.78rem;
@@ -713,8 +738,65 @@ button:disabled {
 }
 
 .inventory-tile,
-.achievement-tile {
+.achievement-tile,
+.codex-tile {
   padding: 12px;
+}
+
+.codex-tile {
+  display: grid;
+  gap: 7px;
+}
+
+.codex-tile span,
+.codex-tile small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.attribute-chip-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.attribute-chip {
+  border-color: var(--attribute);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+  min-height: 34px;
+  padding: 8px 10px;
+}
+
+.template-list {
+  grid-template-columns: 1fr;
+}
+
+.template-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.template-row strong,
+.template-row span {
+  display: block;
+}
+
+.template-row span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.template-actions {
+  display: grid;
+  flex: 0 0 82px;
+  gap: 6px;
 }
 
 .inventory-section {
