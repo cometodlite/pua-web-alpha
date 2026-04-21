@@ -1,0 +1,31 @@
+# 푸아 Web Alpha 0.1
+
+정적 HTML/CSS/JavaScript로 만든 모바일 전용 푸아 웹게임 알파 골격입니다.
+
+## 포함된 범위
+
+- 게스트 시작
+- HOME / STAGE / UNIT / GACHA / MENU 5패널
+- 모바일 고정 폭 UI
+- PWA manifest / 서비스 워커 / 앱 아이콘
+- 피온스 / 트로맨션 / 오로시스 지역
+- 10개 스테이지
+- 자동 평타 + 수동 EX 전투
+- 쿼츠 / 블링 / 형판 재화
+- 캐릭터 4명과 강화
+- 추첨 1종
+- 인벤토리와 localStorage 저장
+
+## 실행
+
+`index.html`을 브라우저에서 열면 바로 실행됩니다.
+
+## GitHub Pages 배포
+
+1. 이 폴더를 GitHub 저장소에 올립니다.
+2. 저장소의 Settings > Pages로 이동합니다.
+3. Source를 Deploy from a branch로 설정합니다.
+4. Branch는 main, 폴더는 root를 선택합니다.
+5. 배포 URL에 접속한 뒤 모바일 브라우저에서 홈 화면에 추가합니다.
+
+서비스 워커는 HTTPS 또는 localhost에서만 동작합니다. GitHub Pages 배포 후에는 PWA 캐시와 홈 화면 추가가 정상 적용됩니다.
