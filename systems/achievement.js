@@ -2,7 +2,7 @@ import { ACHIEVEMENTS } from "../data/achievements.js";
 import { ATTRIBUTE_ADVANTAGE, CHARACTERS } from "../data/characters.js";
 import { STAGES } from "../data/stages.js";
 import { getBossByStage } from "../data/bosses.js";
-import { partyPower } from "./upgrade.js";
+import { battlePartyPower } from "./formation.js";
 
 export function ensureAchievements(save) {
   if (!save.achievements) save.achievements = {};
@@ -79,7 +79,7 @@ function currentValue(save, condition) {
   if (condition.type === "unit_element_owned") {
     return CHARACTERS.some((character) => character.element === condition.element && save.units[character.id]) ? 1 : 0;
   }
-  if (condition.type === "party_power") return Math.round(partyPower(save));
+  if (condition.type === "party_power") return Math.round(battlePartyPower(save));
   if (condition.type === "owned_units") return Object.keys(save.units || {}).length;
   if (condition.type === "claimed_achievements") return Object.keys(save.achievements?.claimed || {}).length;
   if (condition.type === "multiplayer") return 0;

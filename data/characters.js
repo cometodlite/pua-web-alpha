@@ -26,6 +26,11 @@ export const CHARACTERS = [
     element: "star",
     role: "서포터",
     icon: "✦",
+    passive: {
+      id: "penta_blessing",
+      name: "펜타 축복",
+      description: "편성 시 파티 최대 HP가 증가하고 전투 시작 시 별빛 강화가 짧게 적용됩니다.",
+    },
     base: { hp: 188, atk: 27, def: 14, speed: 12, crit: 0.09 },
     growth: { hp: 38, atk: 5, def: 3, speed: 0.5 },
     ex: {
@@ -45,6 +50,11 @@ export const CHARACTERS = [
     element: "quantum",
     role: "브레이커",
     icon: "◈",
+    passive: {
+      id: "quantum_edge",
+      name: "양자 예각",
+      description: "자신의 치명타 확률이 증가하고 EX가 감전 상태를 부여합니다.",
+    },
     base: { hp: 214, atk: 36, def: 12, speed: 9, crit: 0.13 },
     growth: { hp: 42, atk: 7, def: 2, speed: 0.3 },
     ex: {
@@ -64,6 +74,11 @@ export const CHARACTERS = [
     element: "void",
     role: "디버퍼",
     icon: "●",
+    passive: {
+      id: "void_trace",
+      name: "공허 흔적",
+      description: "전투 시작 시 적에게 약화를 부여하고 EX가 지속 피해를 남깁니다.",
+    },
     base: { hp: 172, atk: 42, def: 10, speed: 13, crit: 0.16 },
     growth: { hp: 34, atk: 8, def: 2, speed: 0.5 },
     ex: {
@@ -83,6 +98,11 @@ export const CHARACTERS = [
     element: "imaginary",
     role: "가드",
     icon: "◇",
+    passive: {
+      id: "imaginary_guard",
+      name: "허수 전열",
+      description: "방어막 효율이 증가하고 EX가 적의 속도를 낮춥니다.",
+    },
     base: { hp: 268, atk: 24, def: 20, speed: 7, crit: 0.06 },
     growth: { hp: 54, atk: 4, def: 5, speed: 0.2 },
     ex: {

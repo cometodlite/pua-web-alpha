@@ -7,10 +7,11 @@ import { UPDATE_LOG, getRegionStory, getStageStory } from "./data/story.js";
 import { REGIONS, STAGES, getNextStage, getRegion, getStage } from "./data/stages.js";
 import { achievementSummary, claimAchievement, ensureAchievements, getAchievementRows, getPlayerLevel, recommendedAttributeFor, triggerHiddenAchievement } from "./systems/achievement.js";
 import { playSound } from "./systems/audio.js";
-import { battleSummary, createBattle, tickBattle as advanceBattle, useSkill as fireSkill } from "./systems/battle.js";
-import { DAILY_MISSIONS, claimMission, ensureDailyMissions, updateMission } from "./systems/mission.js";
+import { battleSummary, createBattle, tickBattle as advanceBattle, useCoreBurst as fireCoreBurst, useSkill as fireSkill } from "./systems/battle.js";
+import { battlePartyPower, formationSummary, getBattleParty, toggleFormation } from "./systems/formation.js";
+import { DAILY_MISSIONS, WEEKLY_MISSIONS, claimMission, ensureDailyMissions, updateMission } from "./systems/mission.js";
 import { SAVE_VERSION, addRecent, addUnique, createDefaultSave, loadSave, resetSave, saveGame } from "./systems/save.js";
-import { allUnitCards, applyUpgrade, canUpgrade, getOwnedCharacters, partyPower, upgradeCost } from "./systems/upgrade.js";
+import { allUnitCards, applyUpgrade, canUpgrade, upgradeCost } from "./systems/upgrade.js";
 import { clone, formatNumber, mix, rewardName, rewardText, todayKey, weightedPick } from "./systems/ui.js";
 
 let save = loadSave();
@@ -84,9 +85,11 @@ function wireEvents() {
     if (action === "select-region") selectRegion(id);
     if (action === "start-stage") startBattle(id);
     if (action === "skill") useSkill(id);
+    if (action === "core-burst") useCoreBurst();
     if (action === "retreat") endBattle(false, true);
     if (action === "speed") setBattleSpeed(Number(id));
     if (action === "upgrade") upgradeUnit(id);
+    if (action === "toggle-formation") toggleUnitFormation(id);
     if (action === "pull") pullGacha(Number(count));
     if (action === "claim-mission") claimDailyMission(id);
     if (action === "set-inventory-filter") setInventoryFilter(id);
@@ -166,7 +169,8 @@ function renderTabs() {
 }
 
 function renderHome() {
-  const power = Math.round(partyPower(save));
+  const formation = formationSummary(save);
+  const power = formation.power;
   const nextStage = getNextStage(save);
   const region = getRegion(nextStage.region);
   const story = getRegionStory(region.id);
@@ -201,7 +205,7 @@ function renderHome() {
           <p class="eyebrow">GUIDE</p>
           <h3>오늘 해야 할 것</h3>
         </div>
-        <span class="pill">보유 ${owned}/${CHARACTERS.length}</span>
+        <span class="pill">${formation.elements || "편성"}</span>
       </div>
       ${renderProgressGuide(nextStage, story)}
     </section>
@@ -214,6 +218,16 @@ function renderHome() {
         </div>
       </div>
       <div class="mission-list">${DAILY_MISSIONS.map(missionRow).join("")}</div>
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">WEEKLY</p>
+          <h3>주간 목표</h3>
+        </div>
+      </div>
+      <div class="mission-list">${WEEKLY_MISSIONS.map((mission) => missionRow(mission, "weekly")).join("")}</div>
     </section>
 
     <section class="full-band">
@@ -295,7 +309,7 @@ function renderBattlePanel() {
   const boss = getBossByStage(stage.id);
   const enemyElement = ATTRIBUTES[enemy.element];
   const summary = battleSummary(save);
-  const units = getOwnedCharacters(save);
+  const units = getBattleParty(save);
   const logLines = save.settings.compactLog ? 3 : 6;
 
   return `
@@ -325,6 +339,10 @@ function renderBattlePanel() {
     <div class="speed-row">
       ${[1, 1.5, 2].map((speed) => `<button class="speed-button ${save.settings.battleSpeed === speed ? "is-active" : ""}" data-action="speed" data-id="${speed}" type="button">x${speed}</button>`).join("")}
     </div>
+    <button class="skill-button ${battle.core >= 100 ? "is-ready" : ""}" data-action="core-burst" type="button" ${battle.core >= 100 ? "" : "disabled"}>
+      <span>코어 버스트 · 화염/빙결</span>
+      <strong>${Math.floor(battle.core || 0)}%</strong>
+    </button>
     <div class="skill-row">
       ${units.map((unit) => skillButton(unit, battle, enemy)).join("")}
     </div>
@@ -336,12 +354,13 @@ function renderBattlePanel() {
 }
 
 function renderUnit() {
+  const formation = formationSummary(save);
   return `
     <section class="split-band">
       <div class="split-copy">
         <p class="eyebrow">UNIT</p>
         <h2>코어 각성자</h2>
-        <p>강화는 스테이지 권장 전투력과 속성 상성을 넘기 위한 핵심 루프입니다.</p>
+        <p>0.4부터 실제 전투는 편성된 파티와 패시브 조합을 기준으로 계산됩니다.</p>
       </div>
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="unit" aria-label="속성 문양"></canvas>
@@ -354,7 +373,14 @@ function renderUnit() {
           <p class="eyebrow">ROSTER</p>
           <h3>캐릭터 목록</h3>
         </div>
-        <span class="pill">전투력 ${formatNumber(Math.round(partyPower(save)))}</span>
+        <span class="pill">편성 전투력 ${formatNumber(formation.power)}</span>
+      </div>
+      <div class="guide-card">
+        <strong>현재 편성 · ${formatNumber(formation.power)}</strong>
+        <span>${formation.units.map((unit) => unit.name).join(" / ") || "편성 없음"}</span>
+        <div class="metric-row compact">
+          ${formation.labels.map((label) => `<span class="pill">${label}</span>`).join("")}
+        </div>
       </div>
       <div class="unit-grid">${allUnitCards(save).map(unitTile).join("")}</div>
     </section>
@@ -441,6 +467,7 @@ function renderMenu() {
       ${settingRow("sfx", "효과음", save.settings.sfx)}
       ${settingRow("vibration", "진동", save.settings.vibration)}
       ${settingRow("compactLog", "로그 간소화", save.settings.compactLog)}
+      ${settingRow("autoSkill", "자동 EX", save.settings.autoSkill)}
     </section>
 
     <section class="full-band">
@@ -495,7 +522,7 @@ function metricTile(label, value) {
 function renderProgressGuide(nextStage, story) {
   const nextRegion = getRegion(nextStage.region);
   const boss = getBossByStage(nextStage.id);
-  const power = Math.round(partyPower(save));
+  const power = Math.round(battlePartyPower(save));
   const target = power >= nextStage.recommendedPower ? "탐색 가능" : `강화 필요 ${formatNumber(nextStage.recommendedPower - power)}`;
   const nextUnlock = nextStage.unlocks?.regions?.[0] ? `${getRegion(nextStage.unlocks.regions[0]).name} 해금` : boss ? "보스 제압" : "다음 스테이지 해금";
   return `
@@ -510,8 +537,8 @@ function renderProgressGuide(nextStage, story) {
   `;
 }
 
-function missionRow(mission) {
-  const entry = save.missions.daily[mission.id];
+function missionRow(mission, scope = "daily") {
+  const entry = scope === "weekly" ? save.missions.weekly[mission.id] : save.missions.daily[mission.id];
   const progress = Math.min(mission.target, entry.progress);
   const ready = progress >= mission.target && !entry.claimed;
   return `
@@ -550,7 +577,7 @@ function stageTile(stage) {
   const recommended = ATTRIBUTES[recommendedAttributeFor(enemy.element)];
   const locked = !isStageOpen(stage.id) || !save.unlockedRegions.includes(stage.region);
   const cleared = save.clearedStages.includes(stage.id);
-  const power = Math.round(partyPower(save));
+  const power = Math.round(battlePartyPower(save));
   const reward = cleared ? stage.repeatReward : stage.firstReward;
   const state = cleared ? "CLEAR" : locked ? "LOCK" : power >= stage.recommendedPower ? "OPEN" : "HARD";
 
@@ -564,6 +591,7 @@ function stageTile(stage) {
         <span class="pill">${state}</span>
       </div>
       <div class="stage-meta">권장 전투력 ${formatNumber(stage.recommendedPower)} · 추천 속성 ${recommended.sigil} ${recommended.name}</div>
+      <div class="stage-meta">파밍 목적 ${stage.farmGoal || getRegion(stage.region).focus}</div>
       <div class="stage-meta">${enemy.trait?.label || enemy.archetype}: ${enemy.trait?.description || ""}</div>
       <div class="stage-meta">최초 ${rewardText(stage.firstReward)}</div>
       <div class="stage-meta">반복 ${rewardText(stage.repeatReward)}</div>
@@ -587,6 +615,7 @@ function skillButton(unit, battle, enemy) {
 function unitTile(unit) {
   const element = ATTRIBUTES[unit.element];
   const cost = unit.owned ? upgradeCost(unit.state) : null;
+  const inFormation = save.formation.includes(unit.id);
   return `
     <article class="unit-tile ${unit.owned ? "" : "is-locked"}">
       <div class="unit-title">
@@ -606,8 +635,12 @@ function unitTile(unit) {
         ${statChip("SPD", unit.stats.speed)}
       </div>
       <p class="unit-meta">EX ${unit.ex.name}: ${unit.ex.description}</p>
+      <p class="unit-meta">PASSIVE ${unit.passive?.name}: ${unit.passive?.description}</p>
       ${unit.owned ? `<div class="unit-meta">다음 ${unit.nextStats.hp}/${unit.nextStats.atk}/${unit.nextStats.def} · 비용 ${costText(cost)}</div>` : ""}
-      <button class="small-button ${unit.owned ? "primary-button" : "ghost-button"}" data-action="upgrade" data-id="${unit.id}" type="button" ${canUpgrade(save, unit.id) ? "" : "disabled"}>강화</button>
+      <div class="actions">
+        <button class="small-button ${inFormation ? "primary-button" : "ghost-button"}" data-action="toggle-formation" data-id="${unit.id}" type="button" ${unit.owned ? "" : "disabled"}>${inFormation ? "편성중" : "편성"}</button>
+        <button class="small-button ${unit.owned ? "primary-button" : "ghost-button"}" data-action="upgrade" data-id="${unit.id}" type="button" ${canUpgrade(save, unit.id) ? "" : "disabled"}>강화</button>
+      </div>
     </article>
   `;
 }
@@ -675,10 +708,16 @@ function renderFilteredInventory() {
       { label: "코어 조각", value: save.inventory.materials.core, note: "피온스 주요 드롭" },
       { label: "양자 분진", value: save.inventory.materials.dust, note: "트로맨션/오로시스 드롭" },
       { label: "공허 키", value: save.inventory.materials.key, note: "오로시스 후반 드롭" },
+      { label: "보스 재료", value: save.inventory.materials.bossMaterial || 0, note: "주간 보스 목표 보상" },
     ]));
   }
   if (filter === "all" || filter === "plate") {
-    sections.push(inventorySection("속성 형판", [{ label: "형판", value: save.currencies.plate, note: "보스와 후반 스테이지" }]));
+    sections.push(inventorySection("속성 형판", [
+      { label: "형판", value: save.currencies.plate, note: "보스와 후반 스테이지" },
+      { label: "도심 제어 코어", value: save.inventory.materials.controlCore || 0, note: "피온스 보스 반복 보상" },
+      { label: "무역 집행 인장", value: save.inventory.materials.tradeSeal || 0, note: "트로맨션 보스 반복 보상" },
+      { label: "오염 수핵", value: save.inventory.materials.aquaCore || 0, note: "오로시스 보스 반복 보상" },
+    ]));
   }
   if (filter === "all" || filter === "shard") {
     sections.push(inventorySection("캐릭터 조각", CHARACTERS.map((unit) => ({ label: unit.name, value: save.inventory.shards[unit.id] || 0, note: "가챠 중복 변환" }))));
@@ -774,6 +813,19 @@ function startBattle(stageId) {
 function tickBattleLoop() {
   if (!save.started || !save.battle) return;
   if (els.modal?.open) return;
+  if (save.settings.autoSkill) {
+    const readyUnit = getBattleParty(save).find((unit) => (save.battle.charge[unit.id] || 0) >= 100);
+    if (readyUnit) {
+      const fired = fireSkill(save, readyUnit.id);
+      if (fired.ok) {
+        updateMission(save, "exUse", 1);
+        if (fired.status === "victory") {
+          endBattle(true);
+          return;
+        }
+      }
+    }
+  }
   const result = advanceBattle(save);
   if (result.status === "victory") {
     endBattle(true);
@@ -791,8 +843,22 @@ function tickBattleLoop() {
 function useSkill(unitId) {
   const result = fireSkill(save, unitId);
   if (!result.ok) return;
+  updateMission(save, "exUse", 1);
   playSound(save, "ex");
   vibrate(24);
+  if (result.status === "victory") {
+    endBattle(true);
+    return;
+  }
+  persist();
+  render();
+}
+
+function useCoreBurst() {
+  const result = fireCoreBurst(save);
+  if (!result.ok) return;
+  playSound(save, "ex");
+  vibrate(28);
   if (result.status === "victory") {
     endBattle(true);
     return;
@@ -824,6 +890,7 @@ function endBattle(victory, retreated = false) {
       save.stats.bossKills += 1;
       save.stats.lastBossDate = todayKey();
       save.stats.sameDayBossKills += 1;
+      updateMission(save, "bossClear", 1);
     }
     updateMission(save, "stageClear", 1);
 
@@ -886,6 +953,15 @@ function upgradeUnit(id) {
   persist(`${unit.name} 강화 완료`);
   playSound(save, "upgrade");
   vibrate(18);
+  render();
+}
+
+function toggleUnitFormation(id) {
+  if (!toggleFormation(save, id)) {
+    toast("편성은 최소 1명, 최대 4명입니다.");
+    return;
+  }
+  persist("편성 변경");
   render();
 }
 

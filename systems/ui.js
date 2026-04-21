@@ -19,6 +19,10 @@ export function rewardName(key) {
     core: "코어 조각",
     dust: "양자 분진",
     key: "공허 키",
+    controlCore: "도심 제어 코어",
+    tradeSeal: "무역 집행 인장",
+    aquaCore: "오염 수핵",
+    bossMaterial: "보스 재료",
   };
   return names[key] || key;
 }

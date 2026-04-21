@@ -7,6 +7,7 @@ export const REGIONS = [
     colorB: "#f0bd4f",
     unlockStage: null,
     focus: "쿼츠",
+    farmNote: "초반 강화용 쿼츠와 코어 조각을 확보하기 좋습니다.",
     line: "질서와 산업이 지배하는 중심 도시.",
   },
   {
@@ -17,6 +18,7 @@ export const REGIONS = [
     colorB: "#8fcf68",
     unlockStage: "pions-03",
     focus: "블링",
+    farmNote: "블링과 양자 분진을 모아 중반 강화 비용을 버티는 지역입니다.",
     line: "화려한 번영 뒤에 균열이 번지는 교역 구역.",
   },
   {
@@ -27,6 +29,7 @@ export const REGIONS = [
     colorB: "#5ec8b7",
     unlockStage: "tromansion-03",
     focus: "형판",
+    farmNote: "형판, 공허 키, 보스 재료를 노리는 후반 파밍 지역입니다.",
     line: "맑은 수원과 과학 기술이 충돌하는 연구 지대.",
   },
 ];
@@ -41,6 +44,7 @@ export const STAGES = [
     recommendedPower: 1100,
     firstReward: { quartz: 140, bling: 70, core: 1 },
     repeatReward: { quartz: 70, bling: 34 },
+    farmGoal: "쿼츠 기초 파밍",
     unlocks: { stages: ["pions-02"] },
   },
   {
@@ -52,6 +56,7 @@ export const STAGES = [
     recommendedPower: 1350,
     firstReward: { quartz: 170, bling: 82, core: 1 },
     repeatReward: { quartz: 82, bling: 38 },
+    farmGoal: "쿼츠와 코어 조각",
     unlocks: { stages: ["pions-03"] },
   },
   {
@@ -62,8 +67,9 @@ export const STAGES = [
     enemy: "pions-controller",
     boss: true,
     recommendedPower: 1600,
-    firstReward: { quartz: 280, bling: 120, plate: 2, core: 2 },
-    repeatReward: { quartz: 125, bling: 62, core: 1 },
+    firstReward: { quartz: 280, bling: 120, plate: 2, core: 2, controlCore: 1 },
+    repeatReward: { quartz: 125, bling: 62, core: 1, controlCore: 1 },
+    farmGoal: "도심 제어 코어",
     unlocks: { stages: ["tromansion-01"], regions: ["tromansion"] },
   },
   {
@@ -75,6 +81,7 @@ export const STAGES = [
     recommendedPower: 1850,
     firstReward: { quartz: 120, bling: 190, plate: 1 },
     repeatReward: { quartz: 48, bling: 105 },
+    farmGoal: "블링 집중 파밍",
     unlocks: { stages: ["tromansion-02"] },
   },
   {
@@ -86,6 +93,7 @@ export const STAGES = [
     recommendedPower: 2150,
     firstReward: { quartz: 130, bling: 225, dust: 1 },
     repeatReward: { quartz: 54, bling: 122, dust: 1 },
+    farmGoal: "블링과 양자 분진",
     unlocks: { stages: ["tromansion-03"] },
   },
   {
@@ -96,8 +104,9 @@ export const STAGES = [
     enemy: "trade-enforcer",
     boss: true,
     recommendedPower: 2450,
-    firstReward: { quartz: 190, bling: 360, plate: 3, dust: 1 },
-    repeatReward: { quartz: 82, bling: 175, plate: 1 },
+    firstReward: { quartz: 190, bling: 360, plate: 3, dust: 1, tradeSeal: 1 },
+    repeatReward: { quartz: 82, bling: 175, plate: 1, tradeSeal: 1 },
+    farmGoal: "무역 집행 인장",
     unlocks: { stages: ["orosis-01"], regions: ["orosis"] },
   },
   {
@@ -109,6 +118,7 @@ export const STAGES = [
     recommendedPower: 2850,
     firstReward: { quartz: 175, bling: 170, plate: 2, dust: 1 },
     repeatReward: { quartz: 74, bling: 80, plate: 1 },
+    farmGoal: "형판 입문 파밍",
     unlocks: { stages: ["orosis-02"] },
   },
   {
@@ -120,6 +130,7 @@ export const STAGES = [
     recommendedPower: 3300,
     firstReward: { quartz: 200, bling: 190, plate: 3, key: 1 },
     repeatReward: { quartz: 82, bling: 92, plate: 1 },
+    farmGoal: "공허 키와 형판",
     unlocks: { stages: ["orosis-03"] },
   },
   {
@@ -131,6 +142,7 @@ export const STAGES = [
     recommendedPower: 3800,
     firstReward: { quartz: 230, bling: 210, plate: 3, key: 1 },
     repeatReward: { quartz: 94, bling: 102, plate: 1 },
+    farmGoal: "후반 형판 누적",
     unlocks: { stages: ["orosis-04"] },
   },
   {
@@ -141,8 +153,9 @@ export const STAGES = [
     enemy: "polluted-aqua-core",
     boss: true,
     recommendedPower: 4400,
-    firstReward: { quartz: 520, bling: 330, plate: 6, key: 2, dust: 2 },
-    repeatReward: { quartz: 180, bling: 150, plate: 2, key: 1 },
+    firstReward: { quartz: 520, bling: 330, plate: 6, key: 2, dust: 2, aquaCore: 1 },
+    repeatReward: { quartz: 180, bling: 150, plate: 2, key: 1, aquaCore: 1 },
+    farmGoal: "오염 수핵 재료",
     unlocks: { stages: [] },
   },
 ];

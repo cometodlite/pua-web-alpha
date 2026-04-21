@@ -30,35 +30,41 @@ export function partyPower(save) {
 
 export function upgradeCost(unitState) {
   const level = unitState?.level || 1;
-  return {
+  const cost = {
     quartz: 80 + level * level * 42,
     bling: 60 + level * 55,
     plate: level >= 4 ? Math.floor((level - 2) / 2) : 0,
     shards: level >= 5 ? 10 + (level - 5) * 5 : 0,
   };
+  if (level >= 7) cost.controlCore = 1;
+  if (level >= 9) cost.tradeSeal = 1;
+  if (level >= 11) cost.aquaCore = 1;
+  return cost;
 }
 
 export function canUpgrade(save, id) {
   const unit = save.units[id];
   if (!unit) return false;
   const cost = upgradeCost(unit);
-  return (
-    save.currencies.quartz >= cost.quartz &&
-    save.currencies.bling >= cost.bling &&
-    save.currencies.plate >= cost.plate &&
-    (save.inventory.shards[id] || 0) >= cost.shards
-  );
+  return Object.entries(cost).every(([key, value]) => {
+    if (!value) return true;
+    if (key === "shards") return (save.inventory.shards[id] || 0) >= value;
+    if (key in save.currencies) return (save.currencies[key] || 0) >= value;
+    return (save.inventory.materials[key] || 0) >= value;
+  });
 }
 
 export function applyUpgrade(save, id) {
   if (!canUpgrade(save, id)) return false;
   const unit = save.units[id];
   const cost = upgradeCost(unit);
-  save.currencies.quartz -= cost.quartz;
-  save.currencies.bling -= cost.bling;
-  save.currencies.plate -= cost.plate;
-  save.stats.spent += cost.quartz + cost.bling + cost.plate;
-  save.inventory.shards[id] = (save.inventory.shards[id] || 0) - cost.shards;
+  Object.entries(cost).forEach(([key, value]) => {
+    if (!value) return;
+    if (key === "shards") save.inventory.shards[id] = (save.inventory.shards[id] || 0) - value;
+    else if (key in save.currencies) save.currencies[key] -= value;
+    else save.inventory.materials[key] = (save.inventory.materials[key] || 0) - value;
+  });
+  save.stats.spent += (cost.quartz || 0) + (cost.bling || 0) + (cost.plate || 0);
   unit.shards = save.inventory.shards[id];
   unit.level += 1;
   unit.upgrades += 1;

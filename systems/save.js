@@ -3,7 +3,7 @@ import { clone, todayKey } from "./ui.js";
 
 export const SAVE_KEY = "pua_save";
 export const LEGACY_SAVE_KEY = "pua-web-alpha-01";
-export const SAVE_VERSION = "0.3.0";
+export const SAVE_VERSION = "0.4.0";
 
 export const defaultSave = {
   version: SAVE_VERSION,
@@ -34,7 +34,9 @@ export const defaultSave = {
   },
   missions: {
     date: todayKey(),
+    week: "",
     daily: {},
+    weekly: {},
   },
   settings: {
     bgm: true,
@@ -42,7 +44,9 @@ export const defaultSave = {
     vibration: false,
     battleSpeed: 1,
     compactLog: false,
+    autoSkill: false,
   },
+  formation: ["mepi", "noark"],
   stats: {
     accountExp: 0,
     wins: 0,
@@ -71,6 +75,7 @@ export const defaultSave = {
   },
   ui: {
     inventoryFilter: "all",
+    unitFilter: "all",
   },
   recent: [],
   battle: null,
@@ -125,7 +130,12 @@ export function normalizeSave(incoming) {
       items: { ...base.inventory.items, ...(source.inventory?.items || {}) },
     },
     gacha: { ...base.gacha, ...(source.gacha || {}) },
-    missions: { ...base.missions, ...(source.missions || {}) },
+    missions: {
+      ...base.missions,
+      ...(source.missions || {}),
+      daily: { ...base.missions.daily, ...(source.missions?.daily || {}) },
+      weekly: { ...base.missions.weekly, ...(source.missions?.weekly || {}) },
+    },
     settings: { ...base.settings, ...(source.settings || {}) },
     stats: { ...base.stats, ...(source.stats || {}) },
     achievements: {
@@ -169,6 +179,11 @@ export function normalizeSave(incoming) {
     };
     save.inventory.shards[id] = Number(save.inventory.shards[id] || save.units[id].shards || 0);
   });
+
+  const ownedIds = Object.keys(save.units);
+  const sourceFormation = Array.isArray(source.formation) ? source.formation : base.formation;
+  save.formation = Array.from(new Set(sourceFormation.filter((id) => ownedIds.includes(id)))).slice(0, 4);
+  if (!save.formation.length && ownedIds.length) save.formation.push(ownedIds[0]);
 
   if (!save.gacha.history) save.gacha.history = [];
   save.gacha.history = save.gacha.history.slice(0, 20);
