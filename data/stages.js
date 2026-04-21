@@ -1,0 +1,157 @@
+export const REGIONS = [
+  {
+    id: "pions",
+    name: "피온스",
+    sigil: "P",
+    colorA: "#5ec8b7",
+    colorB: "#f0bd4f",
+    unlockStage: null,
+    focus: "쿼츠",
+    line: "펜타 코어의 잔광이 가장 먼저 흔들린 초입 지역.",
+  },
+  {
+    id: "tromansion",
+    name: "트로맨션",
+    sigil: "T",
+    colorA: "#ee6c58",
+    colorB: "#8fcf68",
+    unlockStage: "pions-03",
+    focus: "블링",
+    line: "형판 광맥과 연구 장치가 겹쳐진 고밀도 공업 구역.",
+  },
+  {
+    id: "orosis",
+    name: "오로시스",
+    sigil: "O",
+    colorA: "#a796ff",
+    colorB: "#5ec8b7",
+    unlockStage: "tromansion-03",
+    focus: "형판",
+    line: "허수 기류가 하늘을 접어 올리는 관측 도시.",
+  },
+];
+
+export const STAGES = [
+  {
+    id: "pions-01",
+    region: "pions",
+    order: 1,
+    name: "균형의 외곽",
+    enemy: "fracture-seed",
+    recommendedPower: 1100,
+    firstReward: { quartz: 140, bling: 70, core: 1 },
+    repeatReward: { quartz: 70, bling: 34 },
+    unlocks: { stages: ["pions-02"] },
+  },
+  {
+    id: "pions-02",
+    region: "pions",
+    order: 2,
+    name: "첫 양자 흔적",
+    enemy: "quantum-wisp",
+    recommendedPower: 1350,
+    firstReward: { quartz: 170, bling: 82, core: 1 },
+    repeatReward: { quartz: 82, bling: 38 },
+    unlocks: { stages: ["pions-03"] },
+  },
+  {
+    id: "pions-03",
+    region: "pions",
+    order: 3,
+    name: "접힌 회랑",
+    enemy: "blank-gear",
+    recommendedPower: 1600,
+    firstReward: { quartz: 230, bling: 94, plate: 1 },
+    repeatReward: { quartz: 104, bling: 44 },
+    unlocks: { stages: ["tromansion-01"], regions: ["tromansion"] },
+  },
+  {
+    id: "tromansion-01",
+    region: "tromansion",
+    order: 4,
+    name: "형판 광맥",
+    enemy: "ore-lattice",
+    recommendedPower: 1850,
+    firstReward: { quartz: 120, bling: 190, plate: 1 },
+    repeatReward: { quartz: 48, bling: 105 },
+    unlocks: { stages: ["tromansion-02"] },
+  },
+  {
+    id: "tromansion-02",
+    region: "tromansion",
+    order: 5,
+    name: "공허 압력실",
+    enemy: "hollow-vane",
+    recommendedPower: 2150,
+    firstReward: { quartz: 130, bling: 225, dust: 1 },
+    repeatReward: { quartz: 54, bling: 122, dust: 1 },
+    unlocks: { stages: ["tromansion-03"] },
+  },
+  {
+    id: "tromansion-03",
+    region: "tromansion",
+    order: 6,
+    name: "붕괴 엔진",
+    enemy: "fault-engine",
+    recommendedPower: 2450,
+    firstReward: { quartz: 150, bling: 280, plate: 2 },
+    repeatReward: { quartz: 62, bling: 145, plate: 1 },
+    unlocks: { stages: ["orosis-01"], regions: ["orosis"] },
+  },
+  {
+    id: "orosis-01",
+    region: "orosis",
+    order: 7,
+    name: "오로라 접면",
+    enemy: "mirror-node",
+    recommendedPower: 2850,
+    firstReward: { quartz: 175, bling: 170, plate: 2, dust: 1 },
+    repeatReward: { quartz: 74, bling: 80, plate: 1 },
+    unlocks: { stages: ["orosis-02"] },
+  },
+  {
+    id: "orosis-02",
+    region: "orosis",
+    order: 8,
+    name: "심층 신호",
+    enemy: "deep-signal",
+    recommendedPower: 3300,
+    firstReward: { quartz: 200, bling: 190, plate: 3, key: 1 },
+    repeatReward: { quartz: 82, bling: 92, plate: 1 },
+    unlocks: { stages: ["orosis-03"] },
+  },
+  {
+    id: "orosis-03",
+    region: "orosis",
+    order: 9,
+    name: "펜타 잔광",
+    enemy: "penta-shard",
+    recommendedPower: 3800,
+    firstReward: { quartz: 230, bling: 210, plate: 3, key: 1 },
+    repeatReward: { quartz: 94, bling: 102, plate: 1 },
+    unlocks: { stages: ["orosis-04"] },
+  },
+  {
+    id: "orosis-04",
+    region: "orosis",
+    order: 10,
+    name: "양자 변칙핵",
+    enemy: "penta-anomaly",
+    recommendedPower: 4400,
+    firstReward: { quartz: 320, bling: 250, plate: 4, key: 1 },
+    repeatReward: { quartz: 120, bling: 115, plate: 2 },
+    unlocks: { stages: [] },
+  },
+];
+
+export function getRegion(id) {
+  return REGIONS.find((region) => region.id === id) || REGIONS[0];
+}
+
+export function getStage(id) {
+  return STAGES.find((stage) => stage.id === id);
+}
+
+export function getNextStage(save) {
+  return STAGES.find((stage) => !save.clearedStages.includes(stage.id)) || STAGES[STAGES.length - 1];
+}

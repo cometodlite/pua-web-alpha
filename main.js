@@ -1,148 +1,14 @@
-const STORAGE_KEY = "pua-web-alpha-01";
+import { ATTRIBUTES, CHARACTERS, CURRENCIES, attributeLabel, getCharacter } from "./data/characters.js";
+import { getEnemy } from "./data/enemies.js";
+import { GACHA } from "./data/gacha.js";
+import { REGIONS, STAGES, getNextStage, getRegion, getStage } from "./data/stages.js";
+import { battleSummary, createBattle, tickBattle as advanceBattle, useSkill as fireSkill } from "./systems/battle.js";
+import { DAILY_MISSIONS, claimMission, ensureDailyMissions, updateMission } from "./systems/mission.js";
+import { SAVE_VERSION, addRecent, addUnique, createDefaultSave, loadSave, resetSave, saveGame } from "./systems/save.js";
+import { allUnitCards, applyUpgrade, canUpgrade, getOwnedCharacters, partyPower, upgradeCost } from "./systems/upgrade.js";
+import { clone, formatNumber, mix, percent, rewardName, rewardText, todayKey, weightedPick } from "./systems/ui.js";
 
-const CURRENCIES = [
-  { id: "quartz", name: "쿼츠", symbol: "Q" },
-  { id: "bling", name: "블링", symbol: "B" },
-  { id: "plate", name: "형판", symbol: "P" },
-];
-
-const ATTRIBUTES = {
-  star: { name: "별", sigil: "✦", color: "#f0bd4f" },
-  quantum: { name: "양자", sigil: "◈", color: "#5ec8b7" },
-  void: { name: "공허", sigil: "●", color: "#a796ff" },
-  imaginary: { name: "허수", sigil: "◇", color: "#ee6c58" },
-};
-
-const REGIONS = [
-  {
-    id: "pions",
-    name: "피온스",
-    sigil: "P",
-    colorA: "#5ec8b7",
-    colorB: "#f0bd4f",
-    line: "펜타 코어의 잔광이 가장 먼저 흔들린 초입 지역.",
-  },
-  {
-    id: "tromansion",
-    name: "트로맨션",
-    sigil: "T",
-    colorA: "#ee6c58",
-    colorB: "#8fcf68",
-    line: "형판 광맥과 연구 장치가 겹쳐진 고밀도 공업 구역.",
-  },
-  {
-    id: "orosis",
-    name: "오로시스",
-    sigil: "O",
-    colorA: "#a796ff",
-    colorB: "#5ec8b7",
-    line: "허수 기류가 하늘을 접어 올리는 관측 도시.",
-  },
-];
-
-const CHARACTERS = [
-  {
-    id: "mepi",
-    name: "메피",
-    grade: "ANTIQUE POWER",
-    element: "star",
-    role: "서포터",
-    icon: "✦",
-    hp: 180,
-    atk: 28,
-    speed: 12,
-    ex: { name: "펜타 리커버", type: "heal", power: 95 },
-  },
-  {
-    id: "noark",
-    name: "노아크",
-    grade: "RARE",
-    element: "quantum",
-    role: "브레이커",
-    icon: "◈",
-    hp: 210,
-    atk: 34,
-    speed: 9,
-    ex: { name: "양자 절단", type: "damage", power: 132 },
-  },
-  {
-    id: "rivia",
-    name: "리비아",
-    grade: "MYSTIC",
-    element: "void",
-    role: "디버퍼",
-    icon: "●",
-    hp: 165,
-    atk: 42,
-    speed: 13,
-    ex: { name: "공허 감압", type: "damage", power: 150 },
-  },
-  {
-    id: "seha",
-    name: "세하",
-    grade: "RARE",
-    element: "imaginary",
-    role: "가드",
-    icon: "◇",
-    hp: 260,
-    atk: 24,
-    speed: 7,
-    ex: { name: "허수 장벽", type: "shield", power: 120 },
-  },
-];
-
-const ENEMIES = [
-  { id: "fracture-seed", name: "균열 결정체", element: "void", hp: 220, atk: 18, shape: "crystal" },
-  { id: "quantum-wisp", name: "양자 부유핵", element: "quantum", hp: 260, atk: 22, shape: "orb" },
-  { id: "blank-gear", name: "허수 톱니", element: "imaginary", hp: 310, atk: 25, shape: "gear" },
-  { id: "penta-shard", name: "펜타 파편", element: "star", hp: 360, atk: 28, shape: "crystal" },
-  { id: "ore-lattice", name: "광맥 격자", element: "quantum", hp: 430, atk: 31, shape: "lattice" },
-  { id: "hollow-vane", name: "공허 베인", element: "void", hp: 520, atk: 35, shape: "orb" },
-  { id: "fault-engine", name: "붕괴 엔진", element: "imaginary", hp: 620, atk: 40, shape: "gear" },
-  { id: "mirror-node", name: "거울 노드", element: "star", hp: 720, atk: 44, shape: "lattice" },
-  { id: "deep-signal", name: "심층 신호체", element: "void", hp: 840, atk: 49, shape: "orb" },
-  { id: "penta-anomaly", name: "펜타 변칙핵", element: "quantum", hp: 980, atk: 55, shape: "crystal" },
-];
-
-const STAGES = [
-  { id: "pions-01", region: "pions", order: 1, name: "균형의 외곽", enemy: "fracture-seed", reward: { quartz: 80, bling: 70, core: 1 } },
-  { id: "pions-02", region: "pions", order: 2, name: "첫 양자 흔적", enemy: "quantum-wisp", reward: { quartz: 90, bling: 82, core: 1 } },
-  { id: "pions-03", region: "pions", order: 3, name: "접힌 회랑", enemy: "blank-gear", reward: { quartz: 100, bling: 94, plate: 1 } },
-  { id: "pions-04", region: "pions", order: 4, name: "펜타 잔광", enemy: "penta-shard", reward: { quartz: 120, bling: 110, core: 2 } },
-  { id: "tromansion-01", region: "tromansion", order: 5, name: "형판 광맥", enemy: "ore-lattice", reward: { quartz: 140, bling: 130, plate: 1 } },
-  { id: "tromansion-02", region: "tromansion", order: 6, name: "공허 압력실", enemy: "hollow-vane", reward: { quartz: 150, bling: 150, dust: 1 } },
-  { id: "tromansion-03", region: "tromansion", order: 7, name: "붕괴 엔진", enemy: "fault-engine", reward: { quartz: 170, bling: 170, plate: 2 } },
-  { id: "orosis-01", region: "orosis", order: 8, name: "오로라 접면", enemy: "mirror-node", reward: { quartz: 190, bling: 190, dust: 1 } },
-  { id: "orosis-02", region: "orosis", order: 9, name: "심층 신호", enemy: "deep-signal", reward: { quartz: 220, bling: 220, key: 1 } },
-  { id: "orosis-03", region: "orosis", order: 10, name: "양자 변칙핵", enemy: "penta-anomaly", reward: { quartz: 260, bling: 250, key: 1, plate: 2 } },
-];
-
-const GACHA_POOL = [
-  { character: "mepi", weight: 8, shards: 18 },
-  { character: "rivia", weight: 18, shards: 12 },
-  { character: "noark", weight: 37, shards: 10 },
-  { character: "seha", weight: 37, shards: 10 },
-];
-
-const BASE_STATE = {
-  version: 1,
-  started: false,
-  activeTab: "home",
-  selectedRegion: "pions",
-  highestStage: 1,
-  currencies: { quartz: 1200, bling: 500, plate: 0 },
-  inventory: { core: 0, dust: 0, key: 0 },
-  ownedUnits: {
-    mepi: { level: 1, shards: 0 },
-    noark: { level: 1, shards: 0 },
-  },
-  stats: { wins: 0, losses: 0, pulls: 0 },
-  lastClaim: "",
-  lastResults: [],
-  battle: null,
-};
-
-let state = loadState();
+let save = loadSave();
 let toastTimer = 0;
 
 const els = {};
@@ -159,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   els.modalContent = document.getElementById("modalContent");
   els.modalClose = document.getElementById("modalClose");
 
+  ensureDailyMissions(save);
   wireEvents();
   syncStartScreen();
   render();
@@ -170,110 +37,89 @@ document.addEventListener("DOMContentLoaded", () => {
     drawActiveScene();
   });
 
-  setInterval(tickBattle, 950);
+  setInterval(tickBattleLoop, 900);
 });
 
 function wireEvents() {
   els.startButton.addEventListener("click", () => {
-    state = freshState();
-    state.started = true;
-    saveState();
+    save = createDefaultSave();
+    save.started = true;
+    ensureDailyMissions(save);
+    persist("게스트 데이터가 생성되었습니다.");
     syncStartScreen();
     render();
-    toast("게스트 데이터가 생성되었습니다.");
   });
 
   els.continueButton.addEventListener("click", () => {
-    state.started = true;
-    saveState();
+    save.started = true;
+    persist();
     syncStartScreen();
     render();
   });
 
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeTab = button.dataset.tab;
-      saveState();
+      save.activeTab = button.dataset.tab;
+      persist();
       render();
     });
   });
 
-  els.view.addEventListener("click", (event) => {
+  document.body.addEventListener("click", (event) => {
     const target = event.target.closest("[data-action]");
     if (!target) return;
-
     const { action, id, count } = target.dataset;
+
     if (action === "select-region") selectRegion(id);
     if (action === "start-stage") startBattle(id);
     if (action === "skill") useSkill(id);
     if (action === "retreat") endBattle(false, true);
-    if (action === "claim") claimSupply();
+    if (action === "speed") setBattleSpeed(Number(id));
     if (action === "upgrade") upgradeUnit(id);
     if (action === "pull") pullGacha(Number(count));
-    if (action === "save") {
-      saveState();
-      toast("저장되었습니다.");
-    }
+    if (action === "claim-mission") claimDailyMission(id);
+    if (action === "toggle-setting") toggleSetting(id);
+    if (action === "save") persist("저장되었습니다.");
     if (action === "load") {
-      state = loadState(true);
+      save = loadSave();
+      ensureDailyMissions(save);
       syncStartScreen();
       render();
       toast("불러왔습니다.");
     }
     if (action === "reset") confirmReset();
+    if (action === "confirm-reset") resetGame();
     if (action === "go") {
-      state.activeTab = id;
-      saveState();
+      save.activeTab = id;
+      persist();
       render();
     }
   });
 
-  els.modalClose.addEventListener("click", () => els.modal.close());
+  els.modalClose.addEventListener("click", closeModal);
+  els.modal.addEventListener("close", () => document.body.classList.remove("modal-open"));
 }
 
-function freshState() {
-  return clone(BASE_STATE);
-}
-
-function loadState(forceStorage = false) {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return freshState();
-
-  try {
-    const parsed = JSON.parse(raw);
-    return mergeState(freshState(), parsed);
-  } catch {
-    return forceStorage ? freshState() : clone(BASE_STATE);
-  }
-}
-
-function mergeState(base, incoming) {
-  const merged = { ...base, ...incoming };
-  merged.currencies = { ...base.currencies, ...(incoming.currencies || {}) };
-  merged.inventory = { ...base.inventory, ...(incoming.inventory || {}) };
-  merged.ownedUnits = { ...base.ownedUnits, ...(incoming.ownedUnits || {}) };
-  merged.stats = { ...base.stats, ...(incoming.stats || {}) };
-  return merged;
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function persist(message = "") {
+  const ok = saveGame(save);
+  if (message) toast(ok ? message : "저장 공간을 확인해주세요.");
 }
 
 function syncStartScreen() {
-  els.startScreen.hidden = state.started;
-  els.continueButton.disabled = !localStorage.getItem(STORAGE_KEY);
+  els.startScreen.hidden = save.started;
+  els.continueButton.disabled = !localStorage.getItem("pua_save") && !localStorage.getItem("pua-web-alpha-01");
 }
 
 function render() {
   renderWallet();
   renderTabs();
 
-  if (!state.started) {
+  if (!save.started) {
     els.view.innerHTML = "";
     return;
   }
 
+  ensureDailyMissions(save);
   const views = {
     home: renderHome,
     stage: renderStage,
@@ -281,8 +127,7 @@ function render() {
     gacha: renderGacha,
     menu: renderMenu,
   };
-
-  els.view.innerHTML = views[state.activeTab]();
+  els.view.innerHTML = views[save.activeTab]();
   requestAnimationFrame(drawActiveScene);
 }
 
@@ -291,7 +136,7 @@ function renderWallet() {
     return `
       <div class="wallet-item">
         <span class="wallet-symbol">${currency.symbol}</span>
-        <strong>${formatNumber(state.currencies[currency.id] || 0)}</strong>
+        <strong>${formatNumber(save.currencies[currency.id])}</strong>
       </div>
     `;
   }).join("");
@@ -299,33 +144,31 @@ function renderWallet() {
 
 function renderTabs() {
   document.querySelectorAll(".tab-button").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tab === state.activeTab);
+    button.classList.toggle("is-active", button.dataset.tab === save.activeTab);
   });
 }
 
 function renderHome() {
-  const cleared = Math.max(0, state.highestStage - 1);
-  const owned = Object.keys(state.ownedUnits).length;
-  const todayClaimed = state.lastClaim === todayKey();
-  const currentRegion = getRegion(state.selectedRegion);
+  const power = Math.round(partyPower(save));
+  const nextStage = getNextStage(save);
+  const region = getRegion(nextStage.region);
+  const owned = Object.keys(save.units).length;
 
   return `
     <section class="hero-band">
       <div class="hero-copy">
-        <p class="eyebrow">CURRENT SIGNAL</p>
-        <h2>펜타 코어가 흔들리고 있습니다.</h2>
-        <p>${currentRegion.line}</p>
+        <p class="eyebrow">PUA WEB ALPHA ${SAVE_VERSION}</p>
+        <h2>${region.name} 신호가 열렸습니다.</h2>
+        <p>${region.line}</p>
         <div class="quick-grid">
-          ${metricTile("클리어", `${cleared}/${STAGES.length}`)}
+          ${metricTile("전투력", formatNumber(power))}
+          ${metricTile("진행", `${save.clearedStages.length}/${STAGES.length}`)}
           ${metricTile("보유 유닛", `${owned}/${CHARACTERS.length}`)}
-          ${metricTile("승리", state.stats.wins)}
-          ${metricTile("추첨", state.stats.pulls)}
+          ${metricTile("천장", `${save.gacha.pity}/${GACHA.pityTarget}`)}
         </div>
         <div class="actions" style="margin-top: 14px">
-          <button class="primary-button" data-action="go" data-id="stage" type="button">탐색</button>
-          <button class="ghost-button" data-action="claim" type="button" ${todayClaimed ? "disabled" : ""}>
-            오늘 보급
-          </button>
+          <button class="primary-button" data-action="start-stage" data-id="${nextStage.id}" type="button">다음 탐색</button>
+          <button class="ghost-button" data-action="go" data-id="unit" type="button">강화</button>
         </div>
       </div>
       <div class="scene-wrap">
@@ -336,22 +179,28 @@ function renderHome() {
     <section class="full-band">
       <div class="section-head">
         <div>
-          <p class="eyebrow">OPENING</p>
-          <h3>양자 신호 기록</h3>
+          <p class="eyebrow">DAILY</p>
+          <h3>오늘 미션</h3>
         </div>
       </div>
-      <p class="stage-note">
-        펜타티온의 도시들은 같은 균열을 서로 다르게 해석한다. 피온스는 균형을,
-        트로맨션은 형판 데이터를, 오로시스는 하늘에 접힌 허수 좌표를 추적한다.
-      </p>
+      <div class="mission-list">${DAILY_MISSIONS.map(missionRow).join("")}</div>
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">RECENT</p>
+          <h3>최근 기록</h3>
+        </div>
+      </div>
+      ${renderRecent()}
     </section>
   `;
 }
 
 function renderStage() {
-  const region = getRegion(state.selectedRegion);
+  const region = getRegion(save.selectedRegion);
   const stages = STAGES.filter((stage) => stage.region === region.id);
-  const battle = state.battle;
 
   return `
     <section class="full-band">
@@ -361,17 +210,16 @@ function renderStage() {
           <h3>지역 선택</h3>
         </div>
       </div>
-      <div class="region-grid">
-        ${REGIONS.map((item) => regionButton(item)).join("")}
-      </div>
+      <div class="region-grid">${REGIONS.map(regionButton).join("")}</div>
     </section>
 
-    <section class="battle-band">
+    <section class="battle-band ${save.battle?.flash ? "is-flash" : ""}">
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="stage" aria-label="${region.name} 지역"></canvas>
+        ${renderFloaters()}
       </div>
       <div class="battle-card">
-        ${battle ? renderBattlePanel(battle) : renderRegionPanel(region)}
+        ${save.battle ? renderBattlePanel() : renderRegionPanel(region)}
       </div>
     </section>
 
@@ -382,42 +230,45 @@ function renderStage() {
           <h3>${region.name}</h3>
         </div>
       </div>
-      <div class="stage-grid">
-        ${stages.map((stage) => stageTile(stage)).join("")}
-      </div>
+      <div class="stage-grid">${stages.map(stageTile).join("")}</div>
     </section>
   `;
 }
 
 function renderRegionPanel(region) {
-  const nextStage = STAGES.find((stage) => stage.order === state.highestStage) || STAGES[STAGES.length - 1];
+  const nextStage = getNextStage(save);
+  const selectedNext = nextStage.region === region.id ? nextStage : STAGES.find((stage) => stage.region === region.id && isStageOpen(stage.id));
+  const locked = !save.unlockedRegions.includes(region.id);
   return `
     <div>
       <p class="eyebrow">SELECTED</p>
       <h3>${region.name}</h3>
-      <p>${region.line}</p>
+      <p>${locked ? "이전 지역의 핵심 스테이지를 클리어하면 열립니다." : region.line}</p>
+    </div>
+    <div class="metric-row compact">
+      <span class="pill">주요 보상 ${region.focus}</span>
+      <span class="pill">전투속도 x${save.settings.battleSpeed}</span>
     </div>
     <div class="actions">
-      <button class="primary-button" data-action="start-stage" data-id="${nextStage.id}" type="button">
-        다음 스테이지
-      </button>
+      <button class="primary-button" data-action="start-stage" data-id="${selectedNext?.id || ""}" type="button" ${locked || !selectedNext ? "disabled" : ""}>진입</button>
     </div>
   `;
 }
 
-function renderBattlePanel(battle) {
+function renderBattlePanel() {
+  const battle = save.battle;
   const stage = getStage(battle.stageId);
   const enemy = getEnemy(stage.enemy);
-  const enemyPercent = percent(battle.enemyHp, battle.enemyMaxHp);
-  const partyPercent = percent(battle.partyHp, battle.partyMaxHp);
-  const units = getOwnedCharacters();
+  const enemyElement = ATTRIBUTES[enemy.element];
+  const summary = battleSummary(save);
+  const units = getOwnedCharacters(save);
 
   return `
     <div>
       <p class="eyebrow">BATTLE</p>
       <div class="battle-topline">
         <h3>${stage.name}</h3>
-        <span class="pill">${enemy.name}</span>
+        <span class="pill">${enemyElement.sigil} ${enemyElement.name}</span>
       </div>
     </div>
     <div>
@@ -425,19 +276,22 @@ function renderBattlePanel(battle) {
         <span>적 HP</span>
         <strong>${Math.max(0, Math.ceil(battle.enemyHp))}/${battle.enemyMaxHp}</strong>
       </div>
-      <div class="bar"><div class="bar-fill enemy" style="width: ${enemyPercent}%"></div></div>
+      <div class="bar"><div class="bar-fill enemy" style="width: ${summary.enemyPercent}%"></div></div>
     </div>
     <div>
       <div class="battle-topline">
-        <span>파티 HP</span>
+        <span>파티 HP · 장벽 ${Math.round(battle.shield)}</span>
         <strong>${Math.max(0, Math.ceil(battle.partyHp))}/${battle.partyMaxHp}</strong>
       </div>
-      <div class="bar"><div class="bar-fill" style="width: ${partyPercent}%"></div></div>
+      <div class="bar"><div class="bar-fill" style="width: ${summary.partyPercent}%"></div></div>
+    </div>
+    <div class="speed-row">
+      ${[1, 2, 3].map((speed) => `<button class="speed-button ${save.settings.battleSpeed === speed ? "is-active" : ""}" data-action="speed" data-id="${speed}" type="button">x${speed}</button>`).join("")}
     </div>
     <div class="skill-row">
-      ${units.map((unit) => skillButton(unit, battle)).join("")}
+      ${units.map((unit) => skillButton(unit, battle, enemy)).join("")}
     </div>
-    <div class="battle-log">${battle.log.slice(-3).join("<br>") || "전투 대기 중"}</div>
+    <div class="battle-log">${battle.log.slice(-5).join("<br>")}</div>
     <div class="actions">
       <button class="ghost-button" data-action="retreat" type="button">철수</button>
     </div>
@@ -450,7 +304,7 @@ function renderUnit() {
       <div class="split-copy">
         <p class="eyebrow">UNIT</p>
         <h2>코어 각성자</h2>
-        <p>각성 기록은 코어 문양, 속성 반응, 전투 동기율로 갱신됩니다.</p>
+        <p>강화는 스테이지 권장 전투력과 속성 상성을 넘기 위한 핵심 루프입니다.</p>
       </div>
       <div class="scene-wrap">
         <canvas class="scene-canvas" data-scene="unit" aria-label="속성 문양"></canvas>
@@ -463,34 +317,27 @@ function renderUnit() {
           <p class="eyebrow">ROSTER</p>
           <h3>캐릭터 목록</h3>
         </div>
+        <span class="pill">전투력 ${formatNumber(Math.round(partyPower(save)))}</span>
       </div>
-      <div class="unit-grid">
-        ${CHARACTERS.map((character) => unitTile(character)).join("")}
-      </div>
+      <div class="unit-grid">${allUnitCards(save).map(unitTile).join("")}</div>
     </section>
   `;
 }
 
 function renderGacha() {
-  const lastResults = state.lastResults || [];
   return `
     <section class="gacha-band">
       <div class="gacha-copy">
         <p class="eyebrow">GACHA</p>
-        <h2>양자 코어 추첨</h2>
-        <p>펜타 코어의 잔향을 스캔해 유닛 또는 조각을 획득합니다.</p>
+        <h2>${GACHA.name}</h2>
+        <p>이미 보유한 유닛은 조각과 재화로 변환됩니다. ${GACHA.pityTarget}회 안에 ANTIQUE POWER 신호가 보정됩니다.</p>
         <div class="gacha-actions">
-          <button class="primary-button" data-action="pull" data-count="1" type="button" ${state.currencies.quartz < 300 ? "disabled" : ""}>
-            1회 Q300
-          </button>
-          <button class="ghost-button" data-action="pull" data-count="10" type="button" ${state.currencies.quartz < 2700 ? "disabled" : ""}>
-            10회 Q2700
-          </button>
+          <button class="primary-button" data-action="pull" data-count="1" type="button" ${save.currencies.quartz < GACHA.singleCost ? "disabled" : ""}>1회 Q${GACHA.singleCost}</button>
+          <button class="ghost-button" data-action="pull" data-count="10" type="button" ${save.currencies.quartz < GACHA.tenCost ? "disabled" : ""}>10회 Q${GACHA.tenCost}</button>
         </div>
         <div class="gacha-rate">
-          <span>ANTIQUE POWER 8%</span>
-          <span>MYSTIC 18%</span>
-          <span>RARE 74%</span>
+          <span>ANTIQUE POWER 8% · MYSTIC 18% · RARE 74%</span>
+          <span>천장 진행 ${save.gacha.pity}/${GACHA.pityTarget}</span>
         </div>
       </div>
       <div class="scene-wrap">
@@ -501,15 +348,21 @@ function renderGacha() {
     <section class="full-band">
       <div class="section-head">
         <div>
+          <p class="eyebrow">POOL</p>
+          <h3>획득 가능 목록</h3>
+        </div>
+      </div>
+      <div class="unit-grid">${CHARACTERS.map(poolTile).join("")}</div>
+    </section>
+
+    <section class="full-band">
+      <div class="section-head">
+        <div>
           <p class="eyebrow">RESULT</p>
           <h3>최근 추첨</h3>
         </div>
       </div>
-      ${
-        lastResults.length
-          ? `<div class="result-grid">${lastResults.map(resultTile).join("")}</div>`
-          : `<p class="empty-copy">아직 기록된 추첨 결과가 없습니다.</p>`
-      }
+      ${save.gacha.history.length ? `<div class="result-grid">${save.gacha.history.slice(0, 10).map(resultTile).join("")}</div>` : `<p class="empty-copy">아직 기록된 추첨 결과가 없습니다.</p>`}
     </section>
   `;
 }
@@ -523,25 +376,25 @@ function renderMenu() {
           <h3>인벤토리</h3>
         </div>
       </div>
-      <div class="inventory-grid">
-        ${inventoryTile("코어 조각", state.inventory.core)}
-        ${inventoryTile("양자 분진", state.inventory.dust)}
-        ${inventoryTile("공허 키", state.inventory.key)}
-      </div>
+      ${inventorySection("재화", CURRENCIES.map((item) => ({ label: item.name, value: save.currencies[item.id] })))}
+      ${inventorySection("강화 재료", [
+        { label: "코어 조각", value: save.inventory.materials.core },
+        { label: "양자 분진", value: save.inventory.materials.dust },
+        { label: "공허 키", value: save.inventory.materials.key },
+      ])}
+      ${inventorySection("캐릭터 조각", CHARACTERS.map((unit) => ({ label: unit.name, value: save.inventory.shards[unit.id] || 0 })))}
     </section>
 
     <section class="full-band">
       <div class="section-head">
         <div>
-          <p class="eyebrow">RECORD</p>
-          <h3>업적</h3>
+          <p class="eyebrow">SETTINGS</p>
+          <h3>설정</h3>
         </div>
       </div>
-      <div class="achievement-grid">
-        ${achievementTile("첫 균열 수습", state.stats.wins >= 1)}
-        ${achievementTile("피온스 통과", state.highestStage > 4)}
-        ${achievementTile("오로시스 접속", state.highestStage > 8)}
-      </div>
+      ${settingRow("bgm", "BGM", save.settings.bgm)}
+      ${settingRow("sfx", "효과음", save.settings.sfx)}
+      ${settingRow("vibration", "진동", save.settings.vibration)}
     </section>
 
     <section class="full-band">
@@ -550,25 +403,26 @@ function renderMenu() {
           <p class="eyebrow">DATA</p>
           <h3>저장</h3>
         </div>
+        <span class="pill">v${SAVE_VERSION}</span>
       </div>
       <div class="setting-row">
         <div>
           <strong>로컬 저장</strong>
-          <small>현재 브라우저에 게스트 데이터가 보관됩니다.</small>
+          <small>세이브 버전, 진행, 지역 해금, 천장, 설정이 함께 저장됩니다.</small>
         </div>
         <button class="small-button primary-button" data-action="save" type="button">저장</button>
       </div>
       <div class="setting-row">
         <div>
           <strong>불러오기</strong>
-          <small>마지막 저장 데이터를 다시 읽습니다.</small>
+          <small>누락 필드는 자동 보정됩니다.</small>
         </div>
         <button class="small-button ghost-button" data-action="load" type="button">불러오기</button>
       </div>
       <div class="setting-row">
         <div>
           <strong>초기화</strong>
-          <small>알파 진행 데이터를 새로 시작합니다.</small>
+          <small>현재 브라우저의 진행 데이터를 새로 시작합니다.</small>
         </div>
         <button class="small-button danger-button" data-action="reset" type="button">초기화</button>
       </div>
@@ -580,13 +434,34 @@ function metricTile(label, value) {
   return `<div class="metric-tile"><strong>${value}</strong><span>${label}</span></div>`;
 }
 
-function regionButton(region) {
+function missionRow(mission) {
+  const entry = save.missions.daily[mission.id];
+  const progress = Math.min(mission.target, entry.progress);
+  const ready = progress >= mission.target && !entry.claimed;
   return `
-    <button class="region-tab ${region.id === state.selectedRegion ? "is-active" : ""}" data-action="select-region" data-id="${region.id}" type="button">
+    <article class="mission-row">
+      <div>
+        <strong>${mission.label}</strong>
+        <span>${progress}/${mission.target} · ${rewardText(mission.reward)}</span>
+      </div>
+      <button class="small-button ${ready ? "primary-button" : "ghost-button"}" data-action="claim-mission" data-id="${mission.id}" type="button" ${ready ? "" : "disabled"}>${entry.claimed ? "완료" : "수령"}</button>
+    </article>
+  `;
+}
+
+function renderRecent() {
+  if (!save.recent.length) return `<p class="empty-copy">아직 기록이 없습니다.</p>`;
+  return `<div class="recent-list">${save.recent.slice(0, 6).map((item) => `<div class="recent-row">${item.text}</div>`).join("")}</div>`;
+}
+
+function regionButton(region) {
+  const locked = !save.unlockedRegions.includes(region.id);
+  return `
+    <button class="region-tab ${region.id === save.selectedRegion ? "is-active" : ""}" data-action="select-region" data-id="${region.id}" type="button" ${locked ? "disabled" : ""}>
       <span class="region-sigil" style="color: ${region.colorA}">${region.sigil}</span>
       <span>
         <strong>${region.name}</strong>
-        <span class="stage-meta">${region.line}</span>
+        <span class="stage-meta">${locked ? "잠김" : `${region.focus} 중심 · ${region.line}`}</span>
       </span>
     </button>
   `;
@@ -594,68 +469,97 @@ function regionButton(region) {
 
 function stageTile(stage) {
   const enemy = getEnemy(stage.enemy);
-  const locked = stage.order > state.highestStage;
-  const cleared = stage.order < state.highestStage;
-  const element = ATTRIBUTES[enemy.element];
+  const enemyElement = ATTRIBUTES[enemy.element];
+  const locked = !isStageOpen(stage.id) || !save.unlockedRegions.includes(stage.region);
+  const cleared = save.clearedStages.includes(stage.id);
+  const power = Math.round(partyPower(save));
+  const reward = cleared ? stage.repeatReward : stage.firstReward;
+  const state = cleared ? "CLEAR" : locked ? "LOCK" : power >= stage.recommendedPower ? "OPEN" : "HARD";
+
   return `
-    <article class="stage-tile">
+    <article class="stage-tile ${locked ? "is-locked" : ""}">
       <div class="stage-title">
         <div>
           <strong>${stage.order}. ${stage.name}</strong>
-          <span class="stage-meta">${enemy.name} · ${element.name}</span>
+          <span class="stage-meta">${enemy.name} · ${enemyElement.sigil} ${enemyElement.name}</span>
         </div>
-        <span class="pill">${cleared ? "CLEAR" : locked ? "LOCK" : "OPEN"}</span>
+        <span class="pill">${state}</span>
       </div>
-      <div class="stage-meta">보상 ${rewardText(stage.reward)}</div>
-      <button class="${locked ? "ghost-button" : "primary-button"}" data-action="start-stage" data-id="${stage.id}" type="button" ${locked ? "disabled" : ""}>
-        진입
-      </button>
+      <div class="stage-meta">권장 전투력 ${formatNumber(stage.recommendedPower)} · 현재 ${formatNumber(power)}</div>
+      <div class="stage-meta">드롭 ${rewardText(reward)}</div>
+      <button class="${locked ? "ghost-button" : "primary-button"}" data-action="start-stage" data-id="${stage.id}" type="button" ${locked ? "disabled" : ""}>진입</button>
     </article>
   `;
 }
 
-function skillButton(unit, battle) {
+function skillButton(unit, battle, enemy) {
   const progress = Math.min(100, Math.floor(battle.charge[unit.id] || 0));
   const ready = progress >= 100;
+  const element = ATTRIBUTES[unit.element];
   return `
     <button class="skill-button ${ready ? "is-ready" : ""}" data-action="skill" data-id="${unit.id}" type="button" ${ready ? "" : "disabled"}>
-      <span>${unit.name} · ${unit.ex.name}</span>
+      <span>${element.sigil} ${unit.name} · ${attributeLabel(unit.element, enemy.element)}</span>
       <strong>${progress}%</strong>
     </button>
   `;
 }
 
-function unitTile(character) {
-  const owned = state.ownedUnits[character.id];
-  const element = ATTRIBUTES[character.element];
-  const level = owned?.level || 0;
-  const cost = upgradeCost(character.id);
+function unitTile(unit) {
+  const element = ATTRIBUTES[unit.element];
+  const cost = unit.owned ? upgradeCost(unit.state) : null;
   return `
-    <article class="unit-tile ${owned ? "" : "is-locked"}">
+    <article class="unit-tile ${unit.owned ? "" : "is-locked"}">
+      <div class="unit-title">
+        <div class="unit-title">
+          <span class="unit-sigil" style="color: ${element.color}">${unit.icon}</span>
+          <div class="unit-main">
+            <strong>${unit.name}</strong>
+            <span class="unit-meta">${unit.grade} · ${element.name} · ${unit.role}</span>
+          </div>
+        </div>
+        <span class="pill">${unit.owned ? `Lv.${unit.state.level}` : "LOCK"}</span>
+      </div>
+      <div class="stat-grid">
+        ${statChip("HP", unit.stats.hp)}
+        ${statChip("ATK", unit.stats.atk)}
+        ${statChip("DEF", unit.stats.def)}
+        ${statChip("SPD", unit.stats.speed)}
+      </div>
+      <p class="unit-meta">EX ${unit.ex.name}: ${unit.ex.description}</p>
+      ${unit.owned ? `<div class="unit-meta">다음 ${unit.nextStats.hp}/${unit.nextStats.atk}/${unit.nextStats.def} · 비용 ${costText(cost)}</div>` : ""}
+      <button class="small-button ${unit.owned ? "primary-button" : "ghost-button"}" data-action="upgrade" data-id="${unit.id}" type="button" ${canUpgrade(save, unit.id) ? "" : "disabled"}>강화</button>
+    </article>
+  `;
+}
+
+function statChip(label, value) {
+  return `<span class="stat-chip"><b>${label}</b>${value}</span>`;
+}
+
+function costText(cost) {
+  return Object.entries(cost)
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => `${rewardName(key)} ${value}`)
+    .join(" · ");
+}
+
+function poolTile(character) {
+  const element = ATTRIBUTES[character.element];
+  const duplicate = GACHA.duplicateRewards[character.grade] || GACHA.duplicateRewards.default;
+  return `
+    <article class="unit-tile">
       <div class="unit-title">
         <div class="unit-title">
           <span class="unit-sigil" style="color: ${element.color}">${character.icon}</span>
           <div class="unit-main">
             <strong>${character.name}</strong>
-            <span class="unit-meta">${character.grade} · ${element.name} · ${character.role}</span>
+            <span class="unit-meta">${character.grade} · ${element.name}</span>
           </div>
         </div>
-        <span class="pill">${owned ? `Lv.${level}` : "LOCK"}</span>
       </div>
-      <div class="unit-meta">EX ${character.ex.name} · 조각 ${owned?.shards || 0}</div>
-      <button class="small-button ${owned ? "primary-button" : "ghost-button"}" data-action="upgrade" data-id="${character.id}" type="button" ${canUpgrade(character.id) ? "" : "disabled"}>
-        강화 ${owned ? `B${cost.bling}` : ""}
-      </button>
+      <p class="unit-meta">중복 변환: 조각 ${duplicate.shards} · 블링 ${duplicate.bling}${duplicate.plate ? ` · 형판 ${duplicate.plate}` : ""}</p>
     </article>
   `;
-}
-
-function inventoryTile(label, value) {
-  return `<div class="inventory-tile"><strong>${value}</strong><span>${label}</span></div>`;
-}
-
-function achievementTile(label, done) {
-  return `<div class="achievement-tile"><strong>${done ? "완료" : "진행"}</strong><span>${label}</span></div>`;
 }
 
 function resultTile(result) {
@@ -668,196 +572,184 @@ function resultTile(result) {
   `;
 }
 
+function inventorySection(title, items) {
+  return `
+    <div class="inventory-section">
+      <h4>${title}</h4>
+      <div class="inventory-grid">${items.map((item) => `<div class="inventory-tile"><strong>${formatNumber(item.value)}</strong><span>${item.label}</span></div>`).join("")}</div>
+    </div>
+  `;
+}
+
+function settingRow(id, label, value) {
+  return `
+    <div class="setting-row">
+      <div>
+        <strong>${label}</strong>
+        <small>${value ? "켜짐" : "꺼짐"}</small>
+      </div>
+      <button class="small-button ${value ? "primary-button" : "ghost-button"}" data-action="toggle-setting" data-id="${id}" type="button">${value ? "ON" : "OFF"}</button>
+    </div>
+  `;
+}
+
+function renderFloaters() {
+  const floats = save.battle?.floats || [];
+  return floats.map((float, index) => `<span class="combat-float ${float.type}" style="--i:${index}">${float.text}</span>`).join("");
+}
+
 function selectRegion(id) {
-  state.selectedRegion = id;
-  saveState();
+  if (!save.unlockedRegions.includes(id)) return;
+  save.selectedRegion = id;
+  persist();
   render();
 }
 
 function startBattle(stageId) {
   const stage = getStage(stageId);
-  if (!stage || stage.order > state.highestStage) return;
-
-  const enemy = getEnemy(stage.enemy);
-  const units = getOwnedCharacters();
-  const partyMaxHp = units.reduce((sum, unit) => sum + unit.hp + unit.level * 38, 0);
-  const enemyMaxHp = enemy.hp + stage.order * 26;
-
-  state.battle = {
-    stageId,
-    enemyHp: enemyMaxHp,
-    enemyMaxHp,
-    partyHp: partyMaxHp,
-    partyMaxHp,
-    charge: Object.fromEntries(units.map((unit) => [unit.id, 18])),
-    enemyTurn: 2,
-    log: [`${enemy.name} 출현`],
-  };
-  state.activeTab = "stage";
-  saveState();
+  if (!stage || !isStageOpen(stage.id) || !save.unlockedRegions.includes(stage.region)) return;
+  save.selectedRegion = stage.region;
+  save.activeTab = "stage";
+  save.stats.stagePlays += 1;
+  save.battle = createBattle(save, stageId);
+  persist();
+  vibrate(18);
   render();
 }
 
-function tickBattle() {
-  if (!state.started || !state.battle) return;
-
-  const battle = state.battle;
-  const stage = getStage(battle.stageId);
-  const enemy = getEnemy(stage.enemy);
-  const units = getOwnedCharacters();
-  if (!units.length) return;
-
-  const autoDamage = units.reduce((sum, unit) => {
-    const elementBonus = unit.element === enemy.element ? 0.92 : 1;
-    return sum + (unit.atk + unit.level * 5) * elementBonus;
-  }, 0);
-  const damage = Math.max(12, Math.round(autoDamage * randomBetween(0.32, 0.48)));
-  battle.enemyHp -= damage;
-  battle.log.push(`자동 공격 ${damage}`);
-
-  units.forEach((unit) => {
-    battle.charge[unit.id] = Math.min(100, (battle.charge[unit.id] || 0) + 16 + Math.floor(unit.speed / 3));
-  });
-
-  battle.enemyTurn -= 1;
-  if (battle.enemyTurn <= 0 && battle.enemyHp > 0) {
-    const incoming = Math.max(10, Math.round((enemy.atk + stage.order * 3) * randomBetween(0.72, 1.08)));
-    battle.partyHp -= incoming;
-    battle.enemyTurn = 2;
-    battle.log.push(`${enemy.name} 반격 ${incoming}`);
-  }
-
-  if (battle.enemyHp <= 0) {
+function tickBattleLoop() {
+  if (!save.started || !save.battle) return;
+  const result = advanceBattle(save);
+  if (result.status === "victory") {
     endBattle(true);
     return;
   }
-
-  if (battle.partyHp <= 0) {
+  if (result.status === "defeat") {
     endBattle(false);
     return;
   }
-
-  saveState();
-  if (state.activeTab === "stage") render();
+  persist();
+  if (save.activeTab === "stage") render();
 }
 
 function useSkill(unitId) {
-  const battle = state.battle;
-  if (!battle || (battle.charge[unitId] || 0) < 100) return;
-
-  const unit = getCharacter(unitId);
-  const stage = getStage(battle.stageId);
-  const enemy = getEnemy(stage.enemy);
-  const level = state.ownedUnits[unitId]?.level || 1;
-  battle.charge[unitId] = 0;
-
-  if (unit.ex.type === "heal") {
-    const heal = unit.ex.power + level * 14;
-    battle.partyHp = Math.min(battle.partyMaxHp, battle.partyHp + heal);
-    battle.log.push(`${unit.name} 회복 ${heal}`);
-  }
-
-  if (unit.ex.type === "shield") {
-    const shield = unit.ex.power + level * 10;
-    battle.partyHp = Math.min(battle.partyMaxHp + 120, battle.partyHp + shield);
-    battle.log.push(`${unit.name} 장벽 ${shield}`);
-  }
-
-  if (unit.ex.type === "damage") {
-    const bonus = unit.element === enemy.element ? 0.9 : 1.08;
-    const damage = Math.round((unit.ex.power + level * 18) * bonus);
-    battle.enemyHp -= damage;
-    battle.log.push(`${unit.name} EX ${damage}`);
-  }
-
-  if (battle.enemyHp <= 0) {
+  const result = fireSkill(save, unitId);
+  if (!result.ok) return;
+  vibrate(24);
+  if (result.status === "victory") {
     endBattle(true);
     return;
   }
+  persist();
+  render();
+}
 
-  saveState();
+function setBattleSpeed(speed) {
+  save.settings.battleSpeed = speed;
+  persist();
   render();
 }
 
 function endBattle(victory, retreated = false) {
-  const battle = state.battle;
+  const battle = save.battle;
   if (!battle) return;
-
   const stage = getStage(battle.stageId);
-  state.battle = null;
+  save.battle = null;
 
   if (victory) {
-    grantReward(stage.reward);
-    state.highestStage = Math.max(state.highestStage, Math.min(STAGES.length + 1, stage.order + 1));
-    state.stats.wins += 1;
-    state.selectedRegion = stage.region;
+    const firstClear = !save.clearedStages.includes(stage.id);
+    const reward = clone(firstClear ? stage.firstReward : stage.repeatReward);
+    grantReward(reward);
+    save.stats.wins += 1;
+    updateMission(save, "stageClear", 1);
+
+    if (firstClear) {
+      addUnique(save.clearedStages, stage.id);
+      stage.unlocks?.stages?.forEach((id) => addUnique(save.unlockedStages, id));
+      stage.unlocks?.regions?.forEach((id) => addUnique(save.unlockedRegions, id));
+    }
+
+    addRecent(save, `${stage.name} ${firstClear ? "최초" : "반복"} 클리어`);
+    persist();
+    render();
+    showRewardModal(stage, reward, firstClear);
     toast(`${stage.name} 클리어`);
-    showBattleReward(stage);
-  } else {
-    state.stats.losses += retreated ? 0 : 1;
-    toast(retreated ? "철수했습니다." : "전투 실패");
+    return;
   }
 
-  saveState();
+  save.stats.losses += retreated ? 0 : 1;
+  addRecent(save, retreated ? `${stage.name} 철수` : `${stage.name} 실패`);
+  persist();
   render();
+  toast(retreated ? "철수했습니다." : "전투 실패");
 }
 
 function grantReward(reward) {
-  state.currencies.quartz += reward.quartz || 0;
-  state.currencies.bling += reward.bling || 0;
-  state.currencies.plate += reward.plate || 0;
-  state.inventory.core += reward.core || 0;
-  state.inventory.dust += reward.dust || 0;
-  state.inventory.key += reward.key || 0;
+  let earnedCurrency = 0;
+  Object.entries(reward).forEach(([key, value]) => {
+    if (key in save.currencies) {
+      save.currencies[key] += value;
+      earnedCurrency += value;
+      return;
+    }
+    save.inventory.materials[key] = (save.inventory.materials[key] || 0) + value;
+  });
+  save.stats.earned += earnedCurrency;
+  if (earnedCurrency) updateMission(save, "earnCurrency", earnedCurrency);
 }
 
-function showBattleReward(stage) {
+function showRewardModal(stage, reward, firstClear) {
   showModal(
-    "탐색 완료",
+    firstClear ? "최초 클리어" : "탐색 완료",
     `
       <p>${stage.name} 보상이 지급되었습니다.</p>
       <div class="result-grid">
-        ${Object.entries(stage.reward)
-          .map(([key, value]) => `<div class="gacha-result"><strong>${value}</strong><span>${rewardName(key)}</span></div>`)
-          .join("")}
+        ${Object.entries(reward).map(([key, value]) => `<div class="gacha-result"><strong>${value}</strong><span>${rewardName(key)}</span></div>`).join("")}
       </div>
     `
   );
 }
 
-function claimSupply() {
-  const today = todayKey();
-  if (state.lastClaim === today) return;
-
-  state.lastClaim = today;
-  state.currencies.quartz += 300;
-  state.currencies.bling += 150;
-  saveState();
+function upgradeUnit(id) {
+  if (!applyUpgrade(save, id)) return;
+  const unit = getCharacter(id);
+  updateMission(save, "upgrade", 1);
+  addRecent(save, `${unit.name} Lv.${save.units[id].level} 강화`);
+  persist(`${unit.name} 강화 완료`);
+  vibrate(18);
   render();
-  toast("오늘 보급 수령");
 }
 
 function pullGacha(count) {
-  const cost = count === 10 ? 2700 : 300;
-  if (state.currencies.quartz < cost) return;
+  const cost = count === 10 ? GACHA.tenCost : GACHA.singleCost;
+  if (save.currencies.quartz < cost) return;
+  save.currencies.quartz -= cost;
 
   const results = [];
-  state.currencies.quartz -= cost;
-
   for (let index = 0; index < count; index += 1) {
-    const item = weightedPick(GACHA_POOL);
-    const character = getCharacter(item.character);
-    const owned = state.ownedUnits[character.id];
+    const picked = pickGachaCharacter();
+    const character = getCharacter(picked.character);
+    const owned = save.units[character.id];
+    const duplicateReward = GACHA.duplicateRewards[character.grade] || GACHA.duplicateRewards.default;
+    const isAntique = character.grade === "ANTIQUE POWER";
+
+    save.gacha.count += 1;
+    save.gacha.pity = isAntique ? 0 : save.gacha.pity + 1;
 
     if (owned) {
-      owned.shards += item.shards;
+      owned.dupes += 1;
+      owned.shards += duplicateReward.shards;
+      save.inventory.shards[character.id] = (save.inventory.shards[character.id] || 0) + duplicateReward.shards;
+      save.currencies.bling += duplicateReward.bling || 0;
+      save.currencies.plate += duplicateReward.plate || 0;
       results.push({
         name: character.name,
         grade: character.grade,
-        detail: `조각 +${item.shards}`,
+        detail: `중복 변환 · 조각 +${duplicateReward.shards}`,
       });
     } else {
-      state.ownedUnits[character.id] = { level: 1, shards: 0 };
+      save.units[character.id] = { level: 1, shards: 0, dupes: 0, upgrades: 0 };
+      save.inventory.shards[character.id] = save.inventory.shards[character.id] || 0;
       results.push({
         name: character.name,
         grade: character.grade,
@@ -866,69 +758,86 @@ function pullGacha(count) {
     }
   }
 
-  state.stats.pulls += count;
-  state.lastResults = results.concat(state.lastResults || []).slice(0, 10);
-  saveState();
+  save.stats.pulls += count;
+  updateMission(save, "gacha", count);
+  save.gacha.history = results.concat(save.gacha.history).slice(0, 20);
+  addRecent(save, `${count}회 추첨 완료`);
+  persist();
   render();
-
-  showModal(
-    "추첨 결과",
-    `<div class="result-grid">${results.map(resultTile).join("")}</div>`
-  );
+  vibrate(26);
+  showModal("추첨 결과", `<div class="result-grid">${results.map(resultTile).join("")}</div>`);
 }
 
-function upgradeUnit(id) {
-  const owned = state.ownedUnits[id];
-  if (!owned || !canUpgrade(id)) return;
+function pickGachaCharacter() {
+  if (save.gacha.pity >= GACHA.pityTarget - 1) {
+    return GACHA.pool.find((item) => getCharacter(item.character).grade === "ANTIQUE POWER") || GACHA.pool[0];
+  }
+  return weightedPick(GACHA.pool);
+}
 
-  const cost = upgradeCost(id);
-  state.currencies.bling -= cost.bling;
-  state.currencies.plate -= cost.plate;
-  owned.level += 1;
-
-  saveState();
+function claimDailyMission(id) {
+  const reward = claimMission(save, id);
+  if (!reward) return;
+  addRecent(save, `미션 보상 수령 · ${rewardText(reward)}`);
+  persist("미션 보상 수령");
   render();
-  toast(`${getCharacter(id).name} 강화 완료`);
 }
 
-function canUpgrade(id) {
-  const owned = state.ownedUnits[id];
-  if (!owned) return false;
-  const cost = upgradeCost(id);
-  return state.currencies.bling >= cost.bling && state.currencies.plate >= cost.plate;
-}
-
-function upgradeCost(id) {
-  const owned = state.ownedUnits[id];
-  const level = owned?.level || 1;
-  return {
-    bling: 120 + level * 80,
-    plate: level >= 4 ? 1 : 0,
-  };
+function toggleSetting(id) {
+  save.settings[id] = !save.settings[id];
+  persist();
+  render();
 }
 
 function confirmReset() {
   showModal(
     "초기화",
     `
-      <p>현재 브라우저의 알파 진행 데이터를 새로 시작합니다.</p>
+      <p>현재 브라우저의 Alpha ${SAVE_VERSION} 진행 데이터를 새로 시작합니다.</p>
       <div class="modal-actions">
-        <button class="ghost-button" onclick="document.getElementById('modal').close()" type="button">취소</button>
-        <button class="danger-button" onclick="resetGame()" type="button">초기화</button>
+        <button class="ghost-button" type="button" data-action="modal-close">취소</button>
+        <button class="danger-button" data-action="confirm-reset" type="button">초기화</button>
       </div>
     `
   );
+  document.querySelector('[data-action="modal-close"]')?.addEventListener("click", closeModal, { once: true });
 }
 
 function resetGame() {
-  localStorage.removeItem(STORAGE_KEY);
-  state = freshState();
-  state.started = true;
-  saveState();
-  els.modal.close();
+  save = resetSave();
+  save.started = true;
+  ensureDailyMissions(save);
+  persist();
+  closeModal();
   syncStartScreen();
   render();
   toast("새 데이터로 시작합니다.");
+}
+
+function isStageOpen(id) {
+  return save.unlockedStages.includes(id);
+}
+
+function showModal(title, html) {
+  els.modalContent.innerHTML = `<h3>${title}</h3>${html}`;
+  document.body.classList.add("modal-open");
+  els.modal.showModal();
+}
+
+function closeModal() {
+  if (els.modal.open) els.modal.close();
+  document.body.classList.remove("modal-open");
+}
+
+function toast(message) {
+  clearTimeout(toastTimer);
+  els.toast.textContent = message;
+  els.toast.classList.add("is-visible");
+  toastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 1900);
+}
+
+function vibrate(ms) {
+  if (save.settings.vibration && "vibrate" in navigator) navigator.vibrate(ms);
 }
 
 function drawStartScene() {
@@ -939,7 +848,6 @@ function drawStartScene() {
 
   ctx.fillStyle = "#0d1010";
   ctx.fillRect(0, 0, width, height);
-
   drawStarfield(ctx, width, height, 64);
   drawCore(ctx, width / 2, height * 0.46, Math.min(width, height) * 0.18, "#f0bd4f", "#5ec8b7");
   drawCityLine(ctx, width, height, "#1a2422");
@@ -950,7 +858,7 @@ function drawActiveScene() {
     const scene = canvas.dataset.scene;
     const ctx = fitCanvas(canvas);
     const { width, height } = canvas.getBoundingClientRect();
-    const region = getRegion(state.selectedRegion);
+    const region = getRegion(save.selectedRegion);
 
     drawBackdrop(ctx, width, height, region);
 
@@ -960,20 +868,15 @@ function drawActiveScene() {
     }
 
     if (scene === "stage") {
-      const battle = state.battle;
-      const stage = battle ? getStage(battle.stageId) : STAGES.find((item) => item.order === state.highestStage);
-      const enemy = stage ? getEnemy(stage.enemy) : ENEMIES[0];
+      const battle = save.battle;
+      const stage = battle ? getStage(battle.stageId) : getNextStage(save);
+      const enemy = stage ? getEnemy(stage.enemy) : getEnemy("fracture-seed");
       drawStageObject(ctx, width, height, region);
       drawEnemy(ctx, width * 0.52, height * 0.48, Math.min(width, height) * 0.22, enemy);
     }
 
-    if (scene === "unit") {
-      drawAttributeWheel(ctx, width, height);
-    }
-
-    if (scene === "gacha") {
-      drawGachaGate(ctx, width, height);
-    }
+    if (scene === "unit") drawAttributeWheel(ctx, width, height);
+    if (scene === "gacha") drawGachaGate(ctx, width, height);
   });
 }
 
@@ -1007,7 +910,6 @@ function drawBackdrop(ctx, width, height, region) {
 }
 
 function drawStarfield(ctx, width, height, count) {
-  ctx.save();
   for (let index = 0; index < count; index += 1) {
     const x = (index * 97) % width;
     const y = (index * 53) % height;
@@ -1015,7 +917,6 @@ function drawStarfield(ctx, width, height, count) {
     ctx.fillStyle = index % 4 === 0 ? "rgba(94,200,183,0.55)" : "rgba(245,239,225,0.38)";
     ctx.fillRect(x, y, size, size);
   }
-  ctx.restore();
 }
 
 function drawCore(ctx, x, y, radius, colorA, colorB) {
@@ -1049,7 +950,6 @@ function drawCore(ctx, x, y, radius, colorA, colorB) {
 }
 
 function drawCityLine(ctx, width, height, color) {
-  ctx.save();
   ctx.fillStyle = color;
   const base = height * 0.82;
   for (let index = 0; index < 18; index += 1) {
@@ -1060,7 +960,6 @@ function drawCityLine(ctx, width, height, color) {
     ctx.fillRect(x + w * 0.36, base - h - 18, w * 0.28, 18);
   }
   ctx.fillRect(0, base, width, height - base);
-  ctx.restore();
 }
 
 function drawStageObject(ctx, width, height, region) {
@@ -1173,7 +1072,6 @@ function drawAttributeWheel(ctx, width, height) {
 function drawGachaGate(ctx, width, height) {
   const cx = width / 2;
   const cy = height / 2;
-  ctx.save();
   for (let index = 0; index < 7; index += 1) {
     const radius = Math.min(width, height) * (0.12 + index * 0.045);
     ctx.strokeStyle = index % 2 ? "rgba(94,200,183,0.78)" : "rgba(240,189,79,0.72)";
@@ -1183,109 +1081,11 @@ function drawGachaGate(ctx, width, height) {
     ctx.stroke();
   }
   drawCore(ctx, cx, cy, Math.min(width, height) * 0.16, "#a796ff", "#f0bd4f");
-  ctx.restore();
-}
-
-function showModal(title, html) {
-  els.modalContent.innerHTML = `<h3>${title}</h3>${html}`;
-  els.modal.showModal();
-}
-
-function toast(message) {
-  clearTimeout(toastTimer);
-  els.toast.textContent = message;
-  els.toast.classList.add("is-visible");
-  toastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 1900);
-}
-
-function getRegion(id) {
-  return REGIONS.find((region) => region.id === id) || REGIONS[0];
-}
-
-function getStage(id) {
-  return STAGES.find((stage) => stage.id === id);
-}
-
-function getEnemy(id) {
-  return ENEMIES.find((enemy) => enemy.id === id) || ENEMIES[0];
-}
-
-function getCharacter(id) {
-  return CHARACTERS.find((character) => character.id === id);
-}
-
-function getOwnedCharacters() {
-  return Object.keys(state.ownedUnits)
-    .map((id) => ({ ...getCharacter(id), ...state.ownedUnits[id] }))
-    .filter(Boolean);
-}
-
-function rewardText(reward) {
-  return Object.entries(reward)
-    .map(([key, value]) => `${rewardName(key)} ${value}`)
-    .join(" · ");
-}
-
-function rewardName(key) {
-  const names = {
-    quartz: "쿼츠",
-    bling: "블링",
-    plate: "형판",
-    core: "코어 조각",
-    dust: "양자 분진",
-    key: "공허 키",
-  };
-  return names[key] || key;
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function percent(value, max) {
-  return Math.max(0, Math.min(100, (value / max) * 100));
-}
-
-function randomBetween(min, max) {
-  return min + Math.random() * (max - min);
-}
-
-function weightedPick(items) {
-  const total = items.reduce((sum, item) => sum + item.weight, 0);
-  let roll = Math.random() * total;
-  for (const item of items) {
-    roll -= item.weight;
-    if (roll <= 0) return item;
-  }
-  return items[items.length - 1];
-}
-
-function todayKey() {
-  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-}
-
-function mix(hex, base, amount) {
-  const a = parseHex(hex);
-  const b = parseHex(base);
-  const result = a.map((channel, index) => Math.round(channel * amount + b[index] * (1 - amount)));
-  return `rgb(${result[0]}, ${result[1]}, ${result[2]})`;
-}
-
-function parseHex(hex) {
-  const clean = hex.replace("#", "");
-  return [0, 2, 4].map((index) => parseInt(clean.slice(index, index + 2), 16));
-}
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {
-      // The game still runs normally when opened from a local file.
-    });
+    navigator.serviceWorker.register("service-worker.js").catch(() => {});
   });
 }

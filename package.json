@@ -1,0 +1,9 @@
+{
+  "name": "pua-web-alpha",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "for f in main.js service-worker.js data/*.js systems/*.js; do node --check \"$f\" || exit 1; done"
+  }
+}

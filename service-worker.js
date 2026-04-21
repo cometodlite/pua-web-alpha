@@ -1,4 +1,4 @@
-const CACHE_NAME = "pua-web-alpha-01-v1";
+const CACHE_NAME = "pua-web-alpha-02-v1";
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PAGE = new URL("./", BASE_URL).toString();
 const PRECACHE_ASSETS = [
@@ -6,6 +6,15 @@ const PRECACHE_ASSETS = [
   "index.html",
   "style.css",
   "main.js",
+  "data/characters.js",
+  "data/enemies.js",
+  "data/gacha.js",
+  "data/stages.js",
+  "systems/battle.js",
+  "systems/mission.js",
+  "systems/save.js",
+  "systems/ui.js",
+  "systems/upgrade.js",
   "manifest.webmanifest",
   "assets/ui/icon-192.png",
   "assets/ui/icon-512.png",
